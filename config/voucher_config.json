@@ -50,6 +50,26 @@
         { "output_name": "프레퍼스", "source_name": "프레퍼스", "partner_code": "063224", "partner_name": "㈜서플라이스", "enabled": false, "manual_review_reason": "자동 생성 제외" },
         { "output_name": "밀본", "source_name": "밀본", "partner_code": "001672", "partner_name": "주식회사 씨에이치인터내셔날", "enabled": false, "manual_review_reason": "자동 생성 제외" }
       ]
+    },
+    "cheongnyangni_station": {
+      "display_name": "청량리역",
+      "doc_prefix": "POS",
+      "consul_dc_format": "{date_short} {business} POS매장임대을매출",
+      "note_dc_format": "{date_short} {business} 임대을 POS매출({store})",
+      "company_code": "1000",
+      "pc_code": "1000",
+      "gaap_code": "1",
+      "docu_code": "11",
+      "wrt_dept_code": "2300",
+      "wrt_emp_no": "202403242",
+      "insr_fg_cd": "FI",
+      "account_codes": {
+        "gross_sales": "401510",
+        "discount": "401511",
+        "cash": "103300",
+        "receivable": "102700"
+      },
+      "stores": []
     }
   },
   "payment_methods": [
@@ -65,4 +85,3 @@
     { "key": "common", "source_card_name": null, "include_from_card_file": false, "daily_field": "전자화폐", "partner_code": "000088", "partner_name": "주식회사 당근마켓", "management_data": "11/신용", "order": 100 }
   ]
 }
-

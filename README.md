@@ -15,9 +15,11 @@ uvicorn app.main:app --reload
 
 ## Current Rule Scope
 
-- 사업장: 서울역
+- 사업장: `서울역`, `청량리역` (청량리역은 기본 골격만 추가되어 있으며 `stores` 매핑 입력 필요)
 - 자동 생성 제외: `프레퍼스`, `밀본`
 - 매핑/예외 규칙: `config/voucher_config.json`
+- 회계일자: 파일 자동 추출 + 화면 수동 입력(`YYYYMMDD` 또는 `YYMMDD`) 지원
+- 템플릿: 기본 파일(`자동전표 양식.xlsx`)이 프로젝트 루트에 없으면 화면에서 템플릿을 업로드해야 함
 
 ## Files
 

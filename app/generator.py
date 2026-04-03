@@ -260,18 +260,34 @@ def generate_voucher(
     template_file_path: Path,
     config: AppConfig,
     output_dir: Path,
+    manual_account_date: str | None = None,
 ) -> GenerationArtifact:
-    parsed_card = parse_card_sales(card_file_path, config)
-    parsed_daily = parse_daily_sales(daily_file_path)
-
-    if parsed_card.account_date != parsed_daily.account_date:
-        raise ParsingError(
-            "카드매출/당일매출 파일의 회계일이 다릅니다. "
-            f"카드={parsed_card.account_date}, 당일={parsed_daily.account_date}"
-        )
-
-    account_date = parsed_card.account_date
     notes: list[str] = []
+    allow_missing_date = manual_account_date is not None
+    parsed_card = parse_card_sales(card_file_path, config, allow_missing_date=allow_missing_date)
+    parsed_daily = parse_daily_sales(daily_file_path, allow_missing_date=allow_missing_date)
+
+    if manual_account_date is not None:
+        account_date = manual_account_date
+        if parsed_card.account_date and parsed_card.account_date != manual_account_date:
+            notes.append(
+                f"카드 파일 회계일({parsed_card.account_date}) 대신 입력값({manual_account_date})을 사용했습니다."
+            )
+        if parsed_daily.account_date and parsed_daily.account_date != manual_account_date:
+            notes.append(
+                f"당일 파일 회계일({parsed_daily.account_date}) 대신 입력값({manual_account_date})을 사용했습니다."
+            )
+    else:
+        if parsed_card.account_date != parsed_daily.account_date:
+            raise ParsingError(
+                "카드매출/당일매출 파일의 회계일이 다릅니다. "
+                f"카드={parsed_card.account_date}, 당일={parsed_daily.account_date}"
+            )
+
+        if parsed_card.account_date is None:
+            raise ParsingError("회계일자를 확인할 수 없습니다. 회계일자를 직접 입력해 주세요.")
+        account_date = parsed_card.account_date
+
     generated_store_names: list[str] = []
     lines: list[VoucherLine] = []
     next_seq = 1
@@ -339,4 +355,3 @@ def generate_voucher(
         generated_store_names=tuple(generated_store_names),
         notes=tuple(notes),
     )
-

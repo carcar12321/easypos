@@ -26,14 +26,27 @@ class DailySalesRow:
 
 @dataclass(frozen=True)
 class ParsedCardSales:
-    account_date: str
+    account_date: str | None
     by_store: dict[str, dict[str, float]]
 
 
 @dataclass(frozen=True)
 class ParsedDailySales:
-    account_date: str
+    account_date: str | None
     by_store: dict[str, DailySalesRow]
+
+
+def _normalize_date_digits(digits: str) -> str | None:
+    normalized = digits
+    if len(normalized) == 6:
+        normalized = f"20{normalized}"
+    if len(normalized) != 8:
+        return None
+    try:
+        datetime.strptime(normalized, "%Y%m%d")
+    except ValueError:
+        return None
+    return normalized
 
 
 def _as_yyyymmdd(value: Any) -> str | None:
@@ -43,8 +56,19 @@ def _as_yyyymmdd(value: Any) -> str | None:
         return value.strftime("%Y%m%d")
     if isinstance(value, str):
         digits = re.sub(r"[^0-9]", "", value)
-        if len(digits) == 8:
-            return digits
+        return _normalize_date_digits(digits)
+    return None
+
+
+def _extract_account_date_from_filename(filename: str) -> str | None:
+    match_8 = re.search(r"(20\d{6})", filename)
+    if match_8:
+        return _normalize_date_digits(match_8.group(1))
+
+    match_6 = re.search(r"(?<!\d)(\d{6})(?!\d)", filename)
+    if match_6:
+        return _normalize_date_digits(match_6.group(1))
+
     return None
 
 
@@ -65,7 +89,7 @@ def _find_card_sheet(path: Path):
     raise ParsingError(f"카드매출 파일에서 필수 헤더를 찾지 못했습니다: {path.name}")
 
 
-def parse_card_sales(path: Path, config: AppConfig) -> ParsedCardSales:
+def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = False) -> ParsedCardSales:
     worksheet, headers, header_row_index = _find_card_sheet(path)
     payment_by_source = config.payment_by_source_card_name
     by_store: dict[str, dict[str, float]] = {}
@@ -99,19 +123,18 @@ def parse_card_sales(path: Path, config: AppConfig) -> ParsedCardSales:
         store_bucket = by_store.setdefault(str(store_name), {})
         store_bucket[payment.key] = store_bucket.get(payment.key, 0.0) + (float(amount) * direction)
 
-    if account_date is None:
+    if account_date is None and not allow_missing_date:
         raise ParsingError(f"카드매출 파일에서 회계일을 찾지 못했습니다: {path.name}")
 
     return ParsedCardSales(account_date=account_date, by_store=by_store)
 
 
-def parse_daily_sales(path: Path) -> ParsedDailySales:
+def parse_daily_sales(path: Path, allow_missing_date: bool = False) -> ParsedDailySales:
     workbook = load_workbook(path, data_only=True)
     worksheet = workbook.worksheets[0]
-    match = re.search(r"(20\d{6})", path.name)
-    if not match:
+    account_date = _extract_account_date_from_filename(path.name)
+    if account_date is None and not allow_missing_date:
         raise ParsingError(f"당일 매출내역 파일명에서 회계일을 찾지 못했습니다: {path.name}")
-    account_date = match.group(1)
 
     by_store: dict[str, DailySalesRow] = {}
     for row_index in range(3, worksheet.max_row + 1):
@@ -133,4 +156,3 @@ def parse_daily_sales(path: Path) -> ParsedDailySales:
         )
 
     return ParsedDailySales(account_date=account_date, by_store=by_store)
-

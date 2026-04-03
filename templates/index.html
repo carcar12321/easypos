@@ -50,7 +50,7 @@
     form { display: grid; gap: 16px; }
     .field { display: grid; gap: 7px; }
     label { font-size: 14px; font-weight: 700; }
-    select, input[type="file"] {
+    select, input[type="file"], input[type="text"] {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -129,6 +129,18 @@
           </select>
         </div>
         <div class="field">
+          <label for="account_date_input">회계일자 (선택)</label>
+          <input
+            id="account_date_input"
+            name="account_date_input"
+            type="text"
+            inputmode="numeric"
+            placeholder="예: 20260329 또는 260329"
+            value="{{ account_date_input }}"
+          >
+          <div class="hint">비워두면 파일에서 회계일자를 자동으로 찾습니다. 못 찾는 경우 직접 입력값을 사용합니다.</div>
+        </div>
+        <div class="field">
           <label for="card_sales_file">카드매출 파일</label>
           <input id="card_sales_file" name="card_sales_file" type="file" accept=".xlsx" required>
         </div>
@@ -178,4 +190,3 @@
   </main>
 </body>
 </html>
-
