@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POS Voucher Generator</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --card: #fffdf8;
+      --line: #d9ceb9;
+      --text: #1f1b15;
+      --muted: #6e6457;
+      --accent: #8f4a20;
+      --accent-soft: #f2e2d1;
+      --danger: #9a3a2c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+      background:
+        radial-gradient(circle at 90% 0%, rgba(143, 74, 32, 0.14), transparent 35%),
+        linear-gradient(180deg, #efe7d9 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+    .wrap {
+      width: min(980px, calc(100% - 32px));
+      margin: 40px auto 56px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+    .hero p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 14px 38px rgba(31, 27, 21, 0.08);
+    }
+    form { display: grid; gap: 16px; }
+    .field { display: grid; gap: 7px; }
+    label { font-size: 14px; font-weight: 700; }
+    select, input[type="file"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 13px;
+      font: inherit;
+      background: #fff;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    button {
+      width: fit-content;
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 20px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .result, .error {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 14px;
+    }
+    .result {
+      background: var(--accent-soft);
+      border: 1px solid #d8b999;
+    }
+    .error {
+      background: #fff1ef;
+      border: 1px solid #efb3ac;
+      color: var(--danger);
+    }
+    .result h2, .error h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .download {
+      display: inline-block;
+      margin-top: 10px;
+      background: var(--text);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 700;
+    }
+    ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
+    li {
+      margin-bottom: 6px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>POS 매장 임대을 매출 자동 생성</h1>
+      <p>카드매출 파일과 매장별 당일 매출내역 파일을 업로드하면 자동전표 업로드용 엑셀을 만듭니다. 프레퍼스/밀본은 자동 생성에서 제외됩니다.</p>
+    </section>
+    <section class="panel">
+      <form method="post" action="/generate" enctype="multipart/form-data">
+        <div class="field">
+          <label for="business_key">사업장</label>
+          <select id="business_key" name="business_key" required>
+            {% for business in businesses %}
+            <option value="{{ business.key }}">{{ business.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="card_sales_file">카드매출 파일</label>
+          <input id="card_sales_file" name="card_sales_file" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field">
+          <label for="daily_sales_file">매장별 당일 매출내역 파일</label>
+          <input id="daily_sales_file" name="daily_sales_file" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field">
+          <label for="template_file">전표 템플릿 파일 (선택)</label>
+          <input id="template_file" name="template_file" type="file" accept=".xlsx">
+          <div class="hint">업로드하지 않으면 프로젝트 기본 템플릿(`자동전표 양식.xlsx`)을 사용합니다.</div>
+        </div>
+        <button type="submit">결과 파일 생성</button>
+      </form>
+
+      {% if error %}
+      <section class="error">
+        <h2>생성 실패</h2>
+        <div>{{ error }}</div>
+      </section>
+      {% endif %}
+
+      {% if result %}
+      <section class="result">
+        <h2>생성 완료</h2>
+        <div><strong>{{ result.output_filename }}</strong> 파일을 만들었습니다.</div>
+        <a class="download" href="/download/{{ result.id }}">다운로드</a>
+        {% if result.generated_store_names %}
+        <h2 style="margin-top:18px;">생성된 매장</h2>
+        <ul>
+          {% for name in result.generated_store_names %}
+          <li>{{ name }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if result.notes %}
+        <h2 style="margin-top:18px;">확인 메모</h2>
+        <ul>
+          {% for note in result.notes %}
+          <li>{{ note }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </section>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
+

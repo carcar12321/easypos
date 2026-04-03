@@ -1,0 +1,68 @@
+{
+  "businesses": {
+    "seoul_station": {
+      "display_name": "서울역",
+      "doc_prefix": "POS",
+      "consul_dc_format": "{date_short} {business} POS매장임대을매출",
+      "note_dc_format": "{date_short} {business} 임대을 POS매출({store})",
+      "company_code": "1000",
+      "pc_code": "1000",
+      "gaap_code": "1",
+      "docu_code": "11",
+      "wrt_dept_code": "2300",
+      "wrt_emp_no": "202403242",
+      "insr_fg_cd": "FI",
+      "account_codes": {
+        "gross_sales": "401510",
+        "discount": "401511",
+        "cash": "103300",
+        "receivable": "102700"
+      },
+      "stores": [
+        { "output_name": "브릭샌드", "source_name": "브릭샌드 서울역점", "partner_code": "002482", "partner_name": "뷰티앤바이트글로벌㈜" },
+        { "output_name": "태극당광장", "source_name": "태극당 서울역광장점", "partner_code": "001670", "partner_name": "태극당 서울역광장점" },
+        { "output_name": "한정선", "source_name": "한정선 서울역점", "partner_code": "103185", "partner_name": "주식회사 한정선", "manual_review_reason": "카드 소액 보정 가능" },
+        { "output_name": "다복집", "source_name": "다복", "partner_code": "076779", "partner_name": "다복집" },
+        { "output_name": "테라로사", "source_name": "테라로사 서울역점", "partner_code": "028273", "partner_name": "㈜학산", "manual_review_reason": "현금 소액 보정 가능" },
+        { "output_name": "태극당3층", "source_name": "태극당 서울역점", "partner_code": "001653", "partner_name": "태극당 서울역점", "manual_review_reason": "카드 소액 보정 가능" },
+        { "output_name": "일상정원", "source_name": "일상정원", "partner_code": "103143", "partner_name": "주식회사 루미호스피탈리티", "manual_review_reason": "월말 조정 가능" },
+        { "output_name": "슈가스컬", "source_name": "슈가스컬", "partner_code": "103143", "partner_name": "주식회사 루미호스피탈리티", "manual_review_reason": "배달/추가 조정 가능" },
+        { "output_name": "LIG홈앤밀", "source_name": "한와담 서울역점", "partner_code": "088180", "partner_name": "㈜LIG홈앤밀" },
+        { "output_name": "함루", "source_name": "함루 서울역점", "partner_code": "003376", "partner_name": "주식회사 레버리치 파트너스" },
+        { "output_name": "서울리에", "source_name": "서울리에", "partner_code": "001929", "partner_name": "㈜윤월드푸드코리아" },
+        { "output_name": "무원", "source_name": "무원", "partner_code": "003219", "partner_name": "주식회사 카페무원" },
+        { "output_name": "센터커피", "source_name": "센터커피 서울역점", "partner_code": "055804", "partner_name": "센터커피 서울역사점" },
+        { "output_name": "아트태그", "source_name": "아트태그", "partner_code": "003118", "partner_name": "주식회사 아트태그" },
+        { "output_name": "돈이찌", "source_name": "돈이찌 서울역점", "partner_code": "002013", "partner_name": "돈이찌 서울역점" },
+        { "output_name": "중화가정", "source_name": "중화가정 서울역점", "partner_code": "002771", "partner_name": "중화가정 서울역점" },
+        { "output_name": "가족회관", "source_name": "가족회관 서울역점", "partner_code": "002396", "partner_name": "가족회관 서울역점" },
+        { "output_name": "땀땀", "source_name": "땀땀 서울역점", "partner_code": "002742", "partner_name": "땀땀 서울역점" },
+        { "output_name": "오장동흥남집", "source_name": "오장동흥남집 서울역점", "partner_code": "001141", "partner_name": "오장동흥남집 서울역점" },
+        { "output_name": "백년옥", "source_name": "백년옥 서울역점", "partner_code": "000540", "partner_name": "주식회사 지정에프앤비(백년옥서울역점)" },
+        { "output_name": "서리재", "source_name": "서리재 서울역점", "partner_code": "311652", "partner_name": "서리재 서울역점" },
+        { "output_name": "호우섬", "source_name": "호우섬 서울역점", "partner_code": "211652", "partner_name": "호우섬 서울역점" },
+        { "output_name": "호시카츠", "source_name": "호시카츠 서울역점", "partner_code": "002249", "partner_name": "호시카츠 서울역점" },
+        { "output_name": "이도곰탕", "source_name": "이도곰탕 서울역점", "partner_code": "007049", "partner_name": "이도곰탕 서울역직영점" },
+        { "output_name": "벤슨", "source_name": "벤슨 서울역점", "partner_code": "003799", "partner_name": "㈜베러스쿱크리머리", "manual_review_reason": "전자화폐/추가 조정 가능" },
+        { "output_name": "도레도레", "source_name": "도레도레 서울역점", "partner_code": "068405", "partner_name": "도레도레", "manual_review_reason": "전자화폐/추가 조정 가능" },
+        { "output_name": "부창제과", "source_name": "부창제과", "partner_code": "001493", "partner_name": "주식회사 에프지푸드" },
+        { "output_name": "블루보틀", "source_name": "블루보틀 서울역", "partner_code": "001195", "partner_name": "블루보틀커피코리아유한회사", "manual_review_reason": "추가 할인 조정 가능" },
+        { "output_name": "프레퍼스", "source_name": "프레퍼스", "partner_code": "063224", "partner_name": "㈜서플라이스", "enabled": false, "manual_review_reason": "자동 생성 제외" },
+        { "output_name": "밀본", "source_name": "밀본", "partner_code": "001672", "partner_name": "주식회사 씨에이치인터내셔날", "enabled": false, "manual_review_reason": "자동 생성 제외" }
+      ]
+    }
+  },
+  "payment_methods": [
+    { "key": "hana", "source_card_name": "하나구외환", "include_from_card_file": true, "daily_field": null, "partner_code": "1048656659", "partner_name": "하나카드주식회사", "management_data": "11/신용", "order": 10 },
+    { "key": "wechat", "source_card_name": "WeChat", "include_from_card_file": true, "daily_field": null, "partner_code": "119948", "partner_name": "한국정보통신㈜", "management_data": "11/신용", "order": 20 },
+    { "key": "kb", "source_card_name": "KB국민카드", "include_from_card_file": true, "daily_field": null, "partner_code": "033138", "partner_name": "국민카드사", "management_data": "11/신용", "order": 30 },
+    { "key": "nh", "source_card_name": "NH카드", "include_from_card_file": true, "daily_field": null, "partner_code": "007072", "partner_name": "NH카드", "management_data": "11/신용", "order": 40 },
+    { "key": "bc", "source_card_name": "비씨카드", "include_from_card_file": true, "daily_field": null, "partner_code": "037726", "partner_name": "비씨카드사", "management_data": "11/신용", "order": 50 },
+    { "key": "hyundai", "source_card_name": "현대카드", "include_from_card_file": true, "daily_field": null, "partner_code": "015419", "partner_name": "현대카드㈜", "management_data": "11/신용", "order": 60 },
+    { "key": "shinhan", "source_card_name": "신한카드", "include_from_card_file": true, "daily_field": null, "partner_code": "072014", "partner_name": "신한카드㈜", "management_data": "11/신용", "order": 70 },
+    { "key": "samsung", "source_card_name": "삼성카드", "include_from_card_file": true, "daily_field": null, "partner_code": "045602", "partner_name": "삼성카드", "management_data": "11/신용", "order": 80 },
+    { "key": "lotte", "source_card_name": "롯데카드", "include_from_card_file": true, "daily_field": null, "partner_code": "054231", "partner_name": "롯데카드㈜", "management_data": "11/신용", "order": 90 },
+    { "key": "common", "source_card_name": null, "include_from_card_file": false, "daily_field": "전자화폐", "partner_code": "000088", "partner_name": "주식회사 당근마켓", "management_data": "11/신용", "order": 100 }
+  ]
+}
+

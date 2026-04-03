@@ -1,0 +1,45 @@
+# POS Voucher Generator
+
+`카드매출.xlsx`와 `매장별 당일 매출내역.xlsx`를 업로드해 자동전표 업로드용 엑셀을 생성하는 FastAPI 앱입니다.
+
+## Local Run
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+브라우저에서 `http://127.0.0.1:8000` 접속
+
+## Current Rule Scope
+
+- 사업장: 서울역
+- 자동 생성 제외: `프레퍼스`, `밀본`
+- 매핑/예외 규칙: `config/voucher_config.json`
+
+## Files
+
+- 엔트리포인트: `app/main.py`
+- 생성 로직: `app/generator.py`
+- 입력 파싱: `app/parsers.py`
+- 설정 로더: `app/config.py`
+- 웹 템플릿: `templates/index.html`
+- Railway 설정: `railway.json`, `Procfile`
+
+## Railway Deploy
+
+1. 이 저장소를 GitHub에 push
+2. Railway에서 New Project -> Deploy from GitHub Repo 선택
+3. 서비스의 Start Command는 `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (이미 `railway.json`/`Procfile`에 반영됨)
+4. 배포 후 `/health` 경로가 200 응답인지 확인
+
+## Config Editing
+
+`config/voucher_config.json`에서 아래를 변경하면 코드 수정 없이 반영됩니다.
+
+- 매장 매핑 (`stores`)
+- 자동 포함/제외 (`enabled`)
+- 수기 확인 메모 (`manual_review_reason`)
+- 결제수단 매핑 (`payment_methods`)
