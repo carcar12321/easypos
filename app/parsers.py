@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
 
-from app.config import AppConfig
+from app.config import AppConfig, BusinessConfig, StoreMapping
+
+try:
+    from pyxlsb import open_workbook
+except ImportError:  # pragma: no cover - dependency check happens at runtime
+    open_workbook = None
 
 
 class ParsingError(ValueError):
@@ -49,6 +55,26 @@ class ParsedSettlementOrders:
 class ParsedVoucherSettlement:
     account_date: str | None
     by_output_store: dict[str, float]
+
+
+@dataclass(frozen=True)
+class SalesFormatInputRow:
+    account_date: str
+    source_name: str
+    partner_code: str
+    card_amount: float
+    cash_amount: float
+    discount_amount: float
+
+
+@dataclass(frozen=True)
+class ParsedSalesFormatInput:
+    rows: tuple[SalesFormatInputRow, ...]
+    parsed_store_count: int
+    skipped_store_names: tuple[str, ...]
+    notes: tuple[str, ...]
+    date_min: str | None
+    date_max: str | None
 
 
 def _normalize_date_digits(digits: str) -> str | None:
@@ -337,6 +363,291 @@ def parse_settlement_orders(
         by_merchant=merchant_totals,
         matched_merchants=matched_merchants,
         unmatched_merchants=tuple(sorted(unmatched_merchants)),
+    )
+
+
+def _normalize_header_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return ""
+    return value.replace(" ", "").strip().lower()
+
+
+def _coerce_amount(value: Any) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if math.isnan(number):
+            return 0.0
+        return number
+    if not isinstance(value, str):
+        return 0.0
+
+    text = value.strip().replace(",", "")
+    if not text:
+        return 0.0
+    if text.lower().startswith("0x"):
+        return 0.0
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
+def _as_yyyymmdd_from_serial(value: Any) -> str | None:
+    if not isinstance(value, (int, float)):
+        return None
+
+    number = float(value)
+    if math.isnan(number):
+        return None
+
+    # 20260329처럼 숫자 자체가 날짜인 경우도 수용한다.
+    digits = str(int(number)) if number.is_integer() else ""
+    if digits:
+        normalized_digits = _normalize_date_digits(digits)
+        if normalized_digits:
+            return normalized_digits
+
+    if number <= 0:
+        return None
+
+    try:
+        converted = datetime(1899, 12, 30) + timedelta(days=number)
+    except OverflowError:
+        return None
+    return converted.strftime("%Y%m%d")
+
+
+def _resolve_sales_format_sheet_name(sheet_names: list[str], store: StoreMapping) -> str | None:
+    source_no_station = store.source_name.replace("서울역점", "").strip()
+    candidates = [
+        store.output_name,
+        store.source_name,
+        source_no_station,
+        store.output_name.replace(" ", ""),
+        store.source_name.replace(" ", ""),
+    ]
+    for candidate in candidates:
+        if candidate and candidate in sheet_names:
+            return candidate
+
+    for sheet_name in sheet_names:
+        if (
+            store.output_name in sheet_name
+            or sheet_name in store.output_name
+            or store.source_name in sheet_name
+            or sheet_name in store.source_name
+        ):
+            return sheet_name
+    return None
+
+
+def _find_sales_format_header(rows: list[list[Any]]) -> tuple[int, dict[str, int]] | None:
+    scan_limit = min(len(rows), 30)
+    for row_index in range(scan_limit):
+        row = rows[row_index]
+        normalized_headers = [_normalize_header_text(cell_value) for cell_value in row]
+        has_date_like = any("일" in header and "자" in header and "입금" not in header for header in normalized_headers)
+        if not has_date_like:
+            continue
+
+        columns: dict[str, int] = {}
+        gross_candidates: list[tuple[int, int]] = []
+        card_candidates: list[tuple[int, int]] = []
+
+        for column_index, header in enumerate(normalized_headers):
+            if not header:
+                continue
+
+            if "일" in header and "자" in header and "입금" not in header:
+                columns.setdefault("date", column_index)
+
+            if "총매출액" in header:
+                gross_candidates.append((0, column_index))
+            elif header == "총매출":
+                gross_candidates.append((1, column_index))
+            elif "총매출" in header and "원가" not in header:
+                gross_candidates.append((2, column_index))
+            elif header == "매출액":
+                gross_candidates.append((3, column_index))
+            elif "순매출" in header:
+                gross_candidates.append((4, column_index))
+
+            if "할인" in header:
+                columns.setdefault("discount", column_index)
+
+            if header in {"현금", "총현금", "일반현금"} or ("현금" in header and "입금" not in header):
+                columns.setdefault("cash", column_index)
+
+            if "카드" in header and "카드사" not in header:
+                if header == "총카드":
+                    priority = 0
+                elif header == "카드":
+                    priority = 1
+                elif header == "카드외":
+                    priority = 2
+                elif header == "일반카드":
+                    priority = 3
+                else:
+                    priority = 9
+                card_candidates.append((priority, column_index))
+
+        if gross_candidates:
+            columns["gross"] = sorted(gross_candidates)[0][1]
+        if card_candidates:
+            columns["card"] = sorted(card_candidates)[0][1]
+
+        if "date" in columns and "gross" in columns:
+            return row_index, columns
+    return None
+
+
+def _extract_sales_rows_from_sheet(
+    *,
+    rows: list[list[Any]],
+    source_name: str,
+    partner_code: str,
+    date_from: str | None,
+    date_to: str | None,
+) -> tuple[list[SalesFormatInputRow], str | None]:
+    header = _find_sales_format_header(rows)
+    if header is None:
+        return [], "시트에서 일자/매출 헤더를 찾지 못해 자동 입력 대상에서 제외했습니다."
+
+    header_row_index, columns = header
+    aggregated_by_date: dict[str, tuple[float, float, float]] = {}
+    used_fallback_card = False
+
+    for row in rows[header_row_index + 1 :]:
+        date_cell = row[columns["date"]] if columns["date"] < len(row) else None
+        account_date = _as_yyyymmdd(date_cell) or _as_yyyymmdd_from_serial(date_cell)
+        if account_date is None:
+            continue
+
+        if date_from and account_date < date_from:
+            continue
+        if date_to and account_date > date_to:
+            continue
+
+        gross_cell = row[columns["gross"]] if columns["gross"] < len(row) else None
+        gross_amount = _coerce_amount(gross_cell)
+
+        discount_amount = 0.0
+        if "discount" in columns:
+            discount_cell = row[columns["discount"]] if columns["discount"] < len(row) else None
+            discount_amount = abs(_coerce_amount(discount_cell))
+
+        cash_amount = 0.0
+        if "cash" in columns:
+            cash_cell = row[columns["cash"]] if columns["cash"] < len(row) else None
+            cash_amount = _coerce_amount(cash_cell)
+
+        card_amount = 0.0
+        if "card" in columns:
+            card_cell = row[columns["card"]] if columns["card"] < len(row) else None
+            card_amount = _coerce_amount(card_cell)
+
+        if "card" not in columns or abs(card_amount) < 1e-9:
+            card_amount = max(0.0, gross_amount - cash_amount - discount_amount)
+            used_fallback_card = True
+
+        if (
+            abs(gross_amount) < 1e-9
+            and abs(discount_amount) < 1e-9
+            and abs(cash_amount) < 1e-9
+            and abs(card_amount) < 1e-9
+        ):
+            continue
+
+        current = aggregated_by_date.get(account_date)
+        if current is None:
+            aggregated_by_date[account_date] = (card_amount, cash_amount, discount_amount)
+            continue
+
+        aggregated_by_date[account_date] = (
+            current[0] + card_amount,
+            current[1] + cash_amount,
+            current[2] + discount_amount,
+        )
+
+    parsed_rows = [
+        SalesFormatInputRow(
+            account_date=account_date,
+            source_name=source_name,
+            partner_code=partner_code,
+            card_amount=amounts[0],
+            cash_amount=amounts[1],
+            discount_amount=amounts[2],
+        )
+        for account_date, amounts in sorted(aggregated_by_date.items())
+    ]
+
+    note = None
+    if used_fallback_card:
+        note = "카드 컬럼이 없거나 0인 구간은 총매출-현금-할인으로 카드금액을 보정했습니다."
+    return parsed_rows, note
+
+
+def parse_sales_format_input(
+    path: Path,
+    *,
+    business: BusinessConfig,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> ParsedSalesFormatInput:
+    if open_workbook is None:
+        raise ParsingError("pyxlsb 패키지가 없어 .xlsb 파일을 읽을 수 없습니다. requirements 설치를 확인해 주세요.")
+
+    if date_from and date_to and date_from > date_to:
+        raise ParsingError("날짜 범위가 올바르지 않습니다. 시작일은 종료일보다 이전이어야 합니다.")
+    if path.suffix.lower() != ".xlsb":
+        raise ParsingError(f"매출 양식 파일은 .xlsb 형식이어야 합니다: {path.name}")
+
+    rows: list[SalesFormatInputRow] = []
+    parsed_store_names: set[str] = set()
+    skipped_store_names: list[str] = []
+    notes: list[str] = []
+
+    with open_workbook(str(path)) as workbook:
+        sheet_names = [str(sheet_name) for sheet_name in workbook.sheets]
+        for store in business.active_stores:
+            sheet_name = _resolve_sales_format_sheet_name(sheet_names, store)
+            if sheet_name is None:
+                skipped_store_names.append(store.source_name)
+                continue
+
+            with workbook.get_sheet(sheet_name) as worksheet:
+                sheet_rows = [[cell.v for cell in row] for row in worksheet.rows()]
+
+            extracted_rows, store_note = _extract_sales_rows_from_sheet(
+                rows=sheet_rows,
+                source_name=store.source_name,
+                partner_code=store.partner_code,
+                date_from=date_from,
+                date_to=date_to,
+            )
+
+            if extracted_rows:
+                parsed_store_names.add(store.source_name)
+                rows.extend(extracted_rows)
+
+            if store_note:
+                notes.append(f"{store.output_name}: {store_note}")
+
+    sorted_rows = sorted(rows, key=lambda item: (item.account_date, item.source_name))
+    date_min = sorted_rows[0].account_date if sorted_rows else None
+    date_max = sorted_rows[-1].account_date if sorted_rows else None
+
+    return ParsedSalesFormatInput(
+        rows=tuple(sorted_rows),
+        parsed_store_count=len(parsed_store_names),
+        skipped_store_names=tuple(sorted(skipped_store_names)),
+        notes=tuple(notes),
+        date_min=date_min,
+        date_max=date_max,
     )
 
 

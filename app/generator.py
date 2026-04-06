@@ -5,19 +5,21 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from app.config import AppConfig, BusinessConfig, PaymentMethodConfig, StoreMapping
 from app.parsers import (
     DailySalesRow,
     ParsedCardSales,
     ParsedDailySales,
+    ParsedSalesFormatInput,
     ParsedSettlementOrders,
     ParsedVoucherSettlement,
     ParsingError,
     parse_card_sales,
     parse_daily_sales,
     parse_generated_voucher_settlement,
+    parse_sales_format_input,
     parse_settlement_orders,
 )
 
@@ -92,6 +94,17 @@ class SettlementVerificationArtifact:
     matched_merchant_count: int
     unmatched_merchants: tuple[str, ...]
     differences: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SalesFormatInputArtifact:
+    output_path: Path
+    output_filename: str
+    row_count: int
+    store_count: int
+    date_min: str | None
+    date_max: str | None
+    notes: tuple[str, ...]
 
 
 def save_upload_to_tempfile(filename: str, content: bytes) -> Path:
@@ -286,6 +299,57 @@ def _write_output(template_path: Path, output_path: Path, lines: list[VoucherLin
     workbook.save(output_path)
 
 
+def _write_sales_input_output(output_path: Path, parsed: ParsedSalesFormatInput) -> None:
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Sheet1"
+    worksheet.append(
+        [
+            "일자",
+            "가맹점명",
+            "가맹점코드",
+            "카드사명",
+            "카드승인금액",
+            "카드구분(승인/취소)",
+            "현금매출액",
+            "현금구분(승인/취소)",
+            "할인액",
+        ]
+    )
+
+    for row in parsed.rows:
+        worksheet.append(
+            [
+                row.account_date,
+                row.source_name,
+                row.partner_code,
+                "매출양식카드합계",
+                row.card_amount,
+                "승인",
+                row.cash_amount,
+                "승인",
+                row.discount_amount,
+            ]
+        )
+
+    workbook.save(output_path)
+
+
+def _build_sales_input_filename(
+    business: BusinessConfig,
+    date_min: str | None,
+    date_max: str | None,
+) -> str:
+    if date_min and date_max:
+        if date_min == date_max:
+            date_part = date_min
+        else:
+            date_part = f"{date_min}_{date_max}"
+    else:
+        date_part = "date_unknown"
+    return f"{business.display_name}업체제출자동입력_{date_part}.xlsx"
+
+
 def generate_voucher(
     *,
     business: BusinessConfig,
@@ -416,6 +480,51 @@ def generate_voucher(
         output_path=output_path,
         output_filename=output_filename,
         generated_store_names=tuple(generated_store_names),
+        notes=tuple(notes),
+    )
+
+
+def generate_sales_input_from_sales_format(
+    *,
+    business: BusinessConfig,
+    sales_format_file_path: Path,
+    output_dir: Path,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> SalesFormatInputArtifact:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    parsed = parse_sales_format_input(
+        sales_format_file_path,
+        business=business,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if not parsed.rows:
+        date_range_text = ""
+        if date_from or date_to:
+            date_range_text = f" (요청 범위: {date_from or '시작제한없음'} ~ {date_to or '종료제한없음'})"
+        raise ParsingError(f"조건에 맞는 자동 입력 데이터가 없습니다{date_range_text}.")
+
+    output_filename = _build_sales_input_filename(
+        business=business,
+        date_min=parsed.date_min,
+        date_max=parsed.date_max,
+    )
+    output_path = output_dir / output_filename
+    _write_sales_input_output(output_path, parsed)
+
+    notes = list(parsed.notes)
+    if parsed.skipped_store_names:
+        notes.append("자동 입력 제외 매장(시트 미존재): " + ", ".join(parsed.skipped_store_names))
+    notes.append("입력 대상 매장 외 시트는 자동 무시했습니다.")
+
+    return SalesFormatInputArtifact(
+        output_path=output_path,
+        output_filename=output_filename,
+        row_count=len(parsed.rows),
+        store_count=len({row.source_name for row in parsed.rows}),
+        date_min=parsed.date_min,
+        date_max=parsed.date_max,
         notes=tuple(notes),
     )
 

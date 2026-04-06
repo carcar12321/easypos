@@ -43,6 +43,7 @@
         { "output_name": "호우섬", "source_name": "호우섬 서울역점", "partner_code": "211652", "partner_name": "호우섬 서울역점" },
         { "output_name": "호시카츠", "source_name": "호시카츠 서울역점", "partner_code": "002249", "partner_name": "호시카츠 서울역점" },
         { "output_name": "이도곰탕", "source_name": "이도곰탕 서울역점", "partner_code": "007049", "partner_name": "이도곰탕 서울역직영점" },
+        { "output_name": "금옥당", "source_name": "금옥당 서울역점", "partner_code": "037978", "partner_name": "금옥당 서울역점" },
         { "output_name": "벤슨", "source_name": "벤슨 서울역점", "partner_code": "003799", "partner_name": "㈜베러스쿱크리머리", "manual_review_reason": "전자화폐/추가 조정 가능" },
         { "output_name": "도레도레", "source_name": "도레도레 서울역점", "partner_code": "068405", "partner_name": "도레도레", "manual_review_reason": "전자화폐/추가 조정 가능" },
         { "output_name": "부창제과", "source_name": "부창제과", "partner_code": "001493", "partner_name": "주식회사 에프지푸드" },

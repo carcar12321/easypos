@@ -205,6 +205,74 @@
 
       <hr class="divider">
 
+      <h2 class="section-title">매출 양식(.xlsb) 자동 입력 파일 생성</h2>
+      <form method="post" action="/generate-sales-input" enctype="multipart/form-data">
+        <div class="field">
+          <label for="sales_business_key">사업장</label>
+          <select id="sales_business_key" name="business_key" required>
+            {% for business in businesses %}
+            <option value="{{ business.key }}">{{ business.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="sales_date_from_input">시작일자 (선택)</label>
+          <input
+            id="sales_date_from_input"
+            name="sales_date_from_input"
+            type="text"
+            inputmode="numeric"
+            placeholder="예: 20260301 또는 260301"
+            value="{{ sales_date_from_input }}"
+          >
+        </div>
+        <div class="field">
+          <label for="sales_date_to_input">종료일자 (선택)</label>
+          <input
+            id="sales_date_to_input"
+            name="sales_date_to_input"
+            type="text"
+            inputmode="numeric"
+            placeholder="예: 20260331 또는 260331"
+            value="{{ sales_date_to_input }}"
+          >
+          <div class="hint">비워두면 전체 날짜를 추출합니다. 자동전표 대상 매장 외 시트는 자동으로 제외합니다.</div>
+        </div>
+        <div class="field">
+          <label for="sales_format_file">매출 양식 파일</label>
+          <input id="sales_format_file" name="sales_format_file" type="file" accept=".xlsb" required>
+          <div class="hint">출력 형식: `easypos 업체 제출` 입력 컬럼(일자/가맹점/코드/카드/현금/할인)</div>
+        </div>
+        <button type="submit">자동 입력 파일 생성</button>
+      </form>
+
+      {% if sales_input_error %}
+      <section class="error">
+        <h2>자동 입력 생성 실패</h2>
+        <div>{{ sales_input_error }}</div>
+      </section>
+      {% endif %}
+
+      {% if sales_input_result %}
+      <section class="result">
+        <h2>자동 입력 생성 완료</h2>
+        <div><strong>{{ sales_input_result.output_filename }}</strong> 파일을 만들었습니다.</div>
+        <div style="margin-top: 8px;">행 수: {{ sales_input_result.row_count }} / 매장 수: {{ sales_input_result.store_count }}</div>
+        <div>날짜 범위: {{ sales_input_result.date_min }} ~ {{ sales_input_result.date_max }}</div>
+        <a class="download" href="/download-sales-input/{{ sales_input_result.id }}">다운로드</a>
+        {% if sales_input_result.notes %}
+        <h2 style="margin-top:18px;">확인 메모</h2>
+        <ul>
+          {% for note in sales_input_result.notes %}
+          <li>{{ note }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <hr class="divider">
+
       <h2 class="section-title">정산주문목록 검증</h2>
       <form method="post" action="/verify-settlement" enctype="multipart/form-data">
         <div class="field">

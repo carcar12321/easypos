@@ -13,7 +13,9 @@ from fastapi.templating import Jinja2Templates
 from app.config import AppConfig, load_config, load_store_name_mapping
 from app.generator import (
     GenerationArtifact,
+    SalesFormatInputArtifact,
     SettlementVerificationArtifact,
+    generate_sales_input_from_sales_format,
     generate_voucher,
     save_upload_to_tempfile,
     verify_settlement_against_voucher,
@@ -42,12 +44,24 @@ class ResultRecord:
 RESULTS: dict[str, ResultRecord] = {}
 
 
+@dataclass(frozen=True)
+class SalesInputResultRecord:
+    artifact: SalesFormatInputArtifact
+
+
+SALES_INPUT_RESULTS: dict[str, SalesInputResultRecord] = {}
+
+
 def _base_context() -> dict[str, object]:
     return {
         "businesses": sorted(config.businesses.values(), key=lambda item: item.display_name),
         "result": None,
         "error": None,
         "account_date_input": "",
+        "sales_input_result": None,
+        "sales_input_error": None,
+        "sales_date_from_input": "",
+        "sales_date_to_input": "",
         "verify_result": None,
         "verify_error": None,
         "verify_account_date_input": "",
@@ -152,6 +166,59 @@ async def generate(
     )
 
 
+@app.post("/generate-sales-input", response_class=HTMLResponse)
+async def generate_sales_input(
+    request: Request,
+    business_key: str = Form(...),
+    sales_date_from_input: str = Form(default=""),
+    sales_date_to_input: str = Form(default=""),
+    sales_format_file: UploadFile = File(...),
+) -> HTMLResponse:
+    business = config.businesses.get(business_key)
+    if not business:
+        raise HTTPException(status_code=400, detail="알 수 없는 사업장입니다.")
+    if not sales_format_file.filename:
+        raise HTTPException(status_code=400, detail="업로드 파일명이 비어 있습니다.")
+
+    context = _base_context()
+    context["sales_date_from_input"] = sales_date_from_input
+    context["sales_date_to_input"] = sales_date_to_input
+
+    try:
+        date_from = _normalize_account_date_input(sales_date_from_input) if sales_date_from_input.strip() else None
+        date_to = _normalize_account_date_input(sales_date_to_input) if sales_date_to_input.strip() else None
+        if date_from and date_to and date_from > date_to:
+            raise ParsingError("날짜 범위가 올바르지 않습니다. 시작일은 종료일보다 이전이어야 합니다.")
+
+        sales_format_path = save_upload_to_tempfile(
+            sales_format_file.filename,
+            await sales_format_file.read(),
+        )
+        artifact = generate_sales_input_from_sales_format(
+            business=business,
+            sales_format_file_path=sales_format_path,
+            output_dir=GENERATED_DIR,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ParsingError as error:
+        context["sales_input_error"] = str(error)
+        return templates.TemplateResponse(request, "index.html", context, status_code=400)
+
+    result_id = uuid4().hex
+    SALES_INPUT_RESULTS[result_id] = SalesInputResultRecord(artifact=artifact)
+    context["sales_input_result"] = {
+        "id": result_id,
+        "output_filename": artifact.output_filename,
+        "row_count": artifact.row_count,
+        "store_count": artifact.store_count,
+        "date_min": artifact.date_min,
+        "date_max": artifact.date_max,
+        "notes": artifact.notes,
+    }
+    return templates.TemplateResponse(request, "index.html", context)
+
+
 @app.post("/verify-settlement", response_class=HTMLResponse)
 async def verify_settlement(
     request: Request,
@@ -210,6 +277,19 @@ async def download(result_id: str) -> FileResponse:
     record = RESULTS.get(result_id)
     if not record:
         raise HTTPException(status_code=404, detail="결과 파일을 찾지 못했습니다.")
+    artifact = record.artifact
+    return FileResponse(
+        path=artifact.output_path,
+        filename=artifact.output_filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/download-sales-input/{result_id}")
+async def download_sales_input(result_id: str) -> FileResponse:
+    record = SALES_INPUT_RESULTS.get(result_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="자동 입력 결과 파일을 찾지 못했습니다.")
     artifact = record.artifact
     return FileResponse(
         path=artifact.output_path,
