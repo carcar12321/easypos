@@ -72,6 +72,10 @@
       "stores": []
     }
   },
+  "settlement_order": {
+    "partner_payment_key": "common",
+    "management_data": "11/당근정산"
+  },
   "payment_methods": [
     { "key": "hana", "source_card_name": "하나구외환", "include_from_card_file": true, "daily_field": null, "partner_code": "1048656659", "partner_name": "하나카드주식회사", "management_data": "11/신용", "order": 10 },
     { "key": "wechat", "source_card_name": "WeChat", "include_from_card_file": true, "daily_field": null, "partner_code": "119948", "partner_name": "한국정보통신㈜", "management_data": "11/신용", "order": 20 },

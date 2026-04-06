@@ -8,7 +8,18 @@ from typing import Any
 from openpyxl import load_workbook
 
 from app.config import AppConfig, BusinessConfig, PaymentMethodConfig, StoreMapping
-from app.parsers import DailySalesRow, ParsedCardSales, ParsedDailySales, ParsingError, parse_card_sales, parse_daily_sales
+from app.parsers import (
+    DailySalesRow,
+    ParsedCardSales,
+    ParsedDailySales,
+    ParsedSettlementOrders,
+    ParsedVoucherSettlement,
+    ParsingError,
+    parse_card_sales,
+    parse_daily_sales,
+    parse_generated_voucher_settlement,
+    parse_settlement_orders,
+)
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,16 @@ class GenerationArtifact:
     notes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class SettlementVerificationArtifact:
+    account_date: str
+    settlement_store_count: int
+    voucher_store_count: int
+    matched_merchant_count: int
+    unmatched_merchants: tuple[str, ...]
+    differences: tuple[str, ...]
+
+
 def save_upload_to_tempfile(filename: str, content: bytes) -> Path:
     suffix = Path(filename).suffix or ".xlsx"
     with NamedTemporaryFile(delete=False, suffix=suffix) as handle:
@@ -130,16 +151,7 @@ def _payment_amounts_for_store(
     daily_sales: ParsedDailySales,
     payment_methods: tuple[PaymentMethodConfig, ...],
 ) -> dict[str, float]:
-    amounts = dict(card_sales.by_store.get(store.source_name, {}))
-    daily_row = daily_sales.by_store.get(store.source_name)
-    if not daily_row:
-        return amounts
-
-    for payment in payment_methods:
-        if payment.daily_field == "전자화폐" and daily_row.electronic_money_sales:
-            amounts[payment.key] = amounts.get(payment.key, 0.0) + daily_row.electronic_money_sales
-
-    return amounts
+    return dict(card_sales.by_store.get(store.source_name, {}))
 
 
 def _build_store_lines(
@@ -151,9 +163,20 @@ def _build_store_lines(
     start_seq: int,
     account_date: str,
     include_consul_dc: bool,
+    settlement_amount: float = 0.0,
+    settlement_payment: PaymentMethodConfig | None = None,
+    settlement_management_data: str | None = None,
 ) -> list[VoucherLine]:
     common = _line_common(business, account_date)
     note_dc = _build_note_dc(business, account_date, store.output_name)
+    discount_amount = abs(daily_row.discount_amount or 0.0)
+    receivable_total = sum(payment_amounts.values()) + settlement_amount
+    debit_total = daily_row.cash_sales + receivable_total
+    # 새 규칙:
+    # - 할인(401511)은 할인액을 음수로
+    # - 현금(103300) + 카드승인(102700)을 먼저 채운 뒤
+    # - 남는 금액으로 401510을 계산해 차대합을 맞춘다.
+    gross_sales_amount = debit_total + discount_amount
     lines: list[VoucherLine] = []
     seq = start_seq
 
@@ -191,7 +214,7 @@ def _build_store_lines(
     add_line(
         drcrfg_cd="2",
         acct_cd=business.account_codes["gross_sales"],
-        amount=daily_row.gross_sales,
+        amount=gross_sales_amount,
         partner_cd=store.partner_code,
         partner_nm=store.partner_name,
         cc_cd="1300",
@@ -199,11 +222,11 @@ def _build_store_lines(
         consul_dc=_build_consul_dc(business, account_date) if include_consul_dc else None,
     )
 
-    if daily_row.discount_amount:
+    if discount_amount:
         add_line(
             drcrfg_cd="2",
             acct_cd=business.account_codes["discount"],
-            amount=(-1) * daily_row.discount_amount,
+            amount=(-1) * discount_amount,
             partner_cd=store.partner_code,
             partner_nm=store.partner_name,
             cc_cd="1300",
@@ -235,6 +258,17 @@ def _build_store_lines(
             management_data=payment.management_data,
         )
 
+    if settlement_amount and settlement_payment is not None:
+        add_line(
+            drcrfg_cd="1",
+            acct_cd=business.account_codes["receivable"],
+            amount=settlement_amount,
+            partner_cd=settlement_payment.partner_code,
+            partner_nm=settlement_payment.partner_name,
+            cc_cd=None,
+            management_data=settlement_management_data or settlement_payment.management_data,
+        )
+
     return lines
 
 
@@ -261,6 +295,8 @@ def generate_voucher(
     config: AppConfig,
     output_dir: Path,
     manual_account_date: str | None = None,
+    settlement_order_file_path: Path | None = None,
+    settlement_store_aliases: dict[str, tuple[str, ...]] | None = None,
 ) -> GenerationArtifact:
     notes: list[str] = []
     allow_missing_date = manual_account_date is not None
@@ -288,6 +324,28 @@ def generate_voucher(
             raise ParsingError("회계일자를 확인할 수 없습니다. 회계일자를 직접 입력해 주세요.")
         account_date = parsed_card.account_date
 
+    parsed_settlement: ParsedSettlementOrders | None = None
+    settlement_payment = config.payment_by_key.get(config.settlement_partner_payment_key)
+    if settlement_order_file_path is not None:
+        if settlement_payment is None:
+            raise ParsingError(
+                f"정산주문목록용 결제수단 키({config.settlement_partner_payment_key})를 payment_methods에서 찾지 못했습니다."
+            )
+        parsed_settlement = parse_settlement_orders(
+            settlement_order_file_path,
+            source_names=business.source_store_names,
+            store_aliases=settlement_store_aliases,
+            expected_account_date=account_date,
+            allow_missing_date=True,
+        )
+        notes.append(
+            "정산주문목록 매칭: "
+            f"{len(parsed_settlement.matched_merchants)}개 가맹점, "
+            f"{len(parsed_settlement.unmatched_merchants)}개 미매칭"
+        )
+        if parsed_settlement.unmatched_merchants:
+            notes.append("정산주문목록 미매칭 가맹점: " + ", ".join(parsed_settlement.unmatched_merchants))
+
     generated_store_names: list[str] = []
     lines: list[VoucherLine] = []
     next_seq = 1
@@ -304,6 +362,7 @@ def generate_voucher(
             daily_sales=parsed_daily,
             payment_methods=config.payment_methods_in_order,
         )
+        settlement_amount = parsed_settlement.by_store.get(store.source_name, 0.0) if parsed_settlement else 0.0
 
         has_amount = any(
             [
@@ -312,6 +371,7 @@ def generate_voucher(
                 daily_row.cash_sales,
                 daily_row.electronic_money_sales,
                 sum(amounts.values()),
+                settlement_amount,
             ]
         )
         if not has_amount or daily_row.gross_sales <= 0:
@@ -326,6 +386,9 @@ def generate_voucher(
             start_seq=next_seq,
             account_date=account_date,
             include_consul_dc=first_line,
+            settlement_amount=settlement_amount,
+            settlement_payment=settlement_payment,
+            settlement_management_data=config.settlement_management_data,
         )
         lines.extend(store_lines)
         next_seq += len(store_lines)
@@ -354,4 +417,62 @@ def generate_voucher(
         output_filename=output_filename,
         generated_store_names=tuple(generated_store_names),
         notes=tuple(notes),
+    )
+
+
+def verify_settlement_against_voucher(
+    *,
+    business: BusinessConfig,
+    voucher_file_path: Path,
+    settlement_order_file_path: Path,
+    settlement_partner_code: str,
+    settlement_management_data: str | None = None,
+    settlement_store_aliases: dict[str, tuple[str, ...]] | None = None,
+    manual_account_date: str | None = None,
+) -> SettlementVerificationArtifact:
+    parsed_voucher: ParsedVoucherSettlement = parse_generated_voucher_settlement(
+        voucher_file_path,
+        settlement_partner_code=settlement_partner_code,
+        settlement_management_data=settlement_management_data,
+    )
+    expected_account_date = manual_account_date or parsed_voucher.account_date
+    if expected_account_date is None:
+        raise ParsingError("검증 기준 회계일자를 찾지 못했습니다. 회계일자를 직접 입력해 주세요.")
+
+    parsed_settlement: ParsedSettlementOrders = parse_settlement_orders(
+        settlement_order_file_path,
+        source_names=business.source_store_names,
+        store_aliases=settlement_store_aliases,
+        expected_account_date=expected_account_date,
+        allow_missing_date=True,
+    )
+
+    source_to_output = {store.source_name: store.output_name for store in business.active_stores}
+    expected_by_output: dict[str, float] = {}
+    for source_name, amount in parsed_settlement.by_store.items():
+        output_name = source_to_output.get(source_name)
+        if output_name is None:
+            continue
+        expected_by_output[output_name] = expected_by_output.get(output_name, 0.0) + amount
+
+    actual_by_output = parsed_voucher.by_output_store
+    all_output_names = sorted(set(expected_by_output) | set(actual_by_output))
+    differences: list[str] = []
+    for output_name in all_output_names:
+        expected_amount = expected_by_output.get(output_name, 0.0)
+        actual_amount = actual_by_output.get(output_name, 0.0)
+        diff = actual_amount - expected_amount
+        if abs(diff) > 0.1:
+            differences.append(
+                f"{output_name}: 전표={_format_amount_text(actual_amount)}, "
+                f"정산주문목록={_format_amount_text(expected_amount)}, 차이={_format_amount_text(diff)}"
+            )
+
+    return SettlementVerificationArtifact(
+        account_date=expected_account_date,
+        settlement_store_count=len(expected_by_output),
+        voucher_store_count=len(actual_by_output),
+        matched_merchant_count=len(parsed_settlement.matched_merchants),
+        unmatched_merchants=parsed_settlement.unmatched_merchants,
+        differences=tuple(differences),
     )

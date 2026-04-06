@@ -58,6 +58,8 @@ class BusinessConfig:
 class AppConfig:
     businesses: dict[str, BusinessConfig]
     payment_methods: tuple[PaymentMethodConfig, ...]
+    settlement_partner_payment_key: str = "common"
+    settlement_management_data: str = "11/당근정산"
 
     @property
     def payment_methods_in_order(self) -> tuple[PaymentMethodConfig, ...]:
@@ -126,5 +128,28 @@ def load_config(path: Path) -> AppConfig:
         key: _load_business(key, value) for key, value in raw["businesses"].items()
     }
     payment_methods = tuple(_load_payment_method(item) for item in raw["payment_methods"])
-    return AppConfig(businesses=businesses, payment_methods=payment_methods)
+    settlement = raw.get("settlement_order", {})
+    return AppConfig(
+        businesses=businesses,
+        payment_methods=payment_methods,
+        settlement_partner_payment_key=settlement.get("partner_payment_key", "common"),
+        settlement_management_data=settlement.get("management_data", "11/당근정산"),
+    )
 
+
+def load_store_name_mapping(path: Path) -> dict[str, dict[str, tuple[str, ...]]]:
+    if not path.exists():
+        return {}
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for business_key, mapping in raw.items():
+        business_mapping: dict[str, tuple[str, ...]] = {}
+        if not isinstance(mapping, dict):
+            continue
+        for source_name, aliases in mapping.items():
+            if isinstance(source_name, str) and isinstance(aliases, list):
+                alias_values = tuple(str(alias) for alias in aliases if isinstance(alias, str))
+                business_mapping[source_name] = alias_values
+        result[business_key] = business_mapping
+    return result

@@ -47,6 +47,16 @@
       padding: 24px;
       box-shadow: 0 14px 38px rgba(31, 27, 21, 0.08);
     }
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+    .divider {
+      margin: 28px 0;
+      border: 0;
+      border-top: 1px solid var(--line);
+    }
     form { display: grid; gap: 16px; }
     .field { display: grid; gap: 7px; }
     label { font-size: 14px; font-weight: 700; }
@@ -119,6 +129,7 @@
       <p>카드매출 파일과 매장별 당일 매출내역 파일을 업로드하면 자동전표 업로드용 엑셀을 만듭니다. 프레퍼스/밀본은 자동 생성에서 제외됩니다.</p>
     </section>
     <section class="panel">
+      <h2 class="section-title">전표 생성</h2>
       <form method="post" action="/generate" enctype="multipart/form-data">
         <div class="field">
           <label for="business_key">사업장</label>
@@ -147,6 +158,11 @@
         <div class="field">
           <label for="daily_sales_file">매장별 당일 매출내역 파일</label>
           <input id="daily_sales_file" name="daily_sales_file" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field">
+          <label for="settlement_order_file">정산주문목록 파일 (선택)</label>
+          <input id="settlement_order_file" name="settlement_order_file" type="file" accept=".xlsx">
+          <div class="hint">업로드하면 C열(가맹점)과 F열(결제금액) 합계로 매장별 추가 `102700` 라인을 생성합니다.</div>
         </div>
         <div class="field">
           <label for="template_file">전표 템플릿 파일 (선택)</label>
@@ -183,6 +199,76 @@
           <li>{{ note }}</li>
           {% endfor %}
         </ul>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <hr class="divider">
+
+      <h2 class="section-title">정산주문목록 검증</h2>
+      <form method="post" action="/verify-settlement" enctype="multipart/form-data">
+        <div class="field">
+          <label for="verify_business_key">사업장</label>
+          <select id="verify_business_key" name="business_key" required>
+            {% for business in businesses %}
+            <option value="{{ business.key }}">{{ business.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="verify_account_date_input">회계일자 (선택)</label>
+          <input
+            id="verify_account_date_input"
+            name="verify_account_date_input"
+            type="text"
+            inputmode="numeric"
+            placeholder="예: 20260402 또는 260402"
+            value="{{ verify_account_date_input }}"
+          >
+          <div class="hint">비워두면 전표 파일에서 회계일자를 추정합니다.</div>
+        </div>
+        <div class="field">
+          <label for="voucher_file">생성된 전표 파일</label>
+          <input id="voucher_file" name="voucher_file" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field">
+          <label for="settlement_order_file_verify">정산주문목록 파일</label>
+          <input id="settlement_order_file_verify" name="settlement_order_file_verify" type="file" accept=".xlsx" required>
+        </div>
+        <button type="submit">정산 검증 실행</button>
+      </form>
+
+      {% if verify_error %}
+      <section class="error">
+        <h2>검증 실패</h2>
+        <div>{{ verify_error }}</div>
+      </section>
+      {% endif %}
+
+      {% if verify_result %}
+      <section class="result">
+        <h2>검증 결과</h2>
+        <div>회계일자: <strong>{{ verify_result.account_date }}</strong></div>
+        <div>정산 매칭 가맹점 수: {{ verify_result.matched_merchant_count }}</div>
+        <div>정산 반영 매장 수: {{ verify_result.settlement_store_count }}</div>
+        <div>전표 반영 매장 수: {{ verify_result.voucher_store_count }}</div>
+        {% if verify_result.unmatched_merchants %}
+        <h2 style="margin-top:18px;">정산 미매칭 가맹점</h2>
+        <ul>
+          {% for merchant in verify_result.unmatched_merchants %}
+          <li>{{ merchant }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if verify_result.differences %}
+        <h2 style="margin-top:18px;">차이 내역</h2>
+        <ul>
+          {% for diff in verify_result.differences %}
+          <li>{{ diff }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div style="margin-top: 12px;">차이 없음 (전표와 정산주문목록 일치)</div>
         {% endif %}
       </section>
       {% endif %}
