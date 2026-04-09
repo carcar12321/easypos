@@ -21,12 +21,12 @@
       "stores": [
         { "output_name": "브릭샌드", "source_name": "브릭샌드 서울역점", "partner_code": "002482", "partner_name": "뷰티앤바이트글로벌㈜" },
         { "output_name": "태극당광장", "source_name": "태극당 서울역광장점", "partner_code": "001670", "partner_name": "태극당 서울역광장점" },
-        { "output_name": "한정선", "source_name": "한정선 서울역점", "partner_code": "103185", "partner_name": "주식회사 한정선", "manual_review_reason": "카드 소액 보정 가능" },
+        { "output_name": "한정선", "source_name": "한정선 서울역점", "partner_code": "103185", "partner_name": "주식회사 한정선", "enabled": false, "manual_review_reason": "자동 생성 제외" },
         { "output_name": "다복집", "source_name": "다복", "partner_code": "076779", "partner_name": "다복집" },
         { "output_name": "테라로사", "source_name": "테라로사 서울역점", "partner_code": "028273", "partner_name": "㈜학산", "manual_review_reason": "현금 소액 보정 가능" },
         { "output_name": "태극당3층", "source_name": "태극당 서울역점", "partner_code": "001653", "partner_name": "태극당 서울역점", "manual_review_reason": "카드 소액 보정 가능" },
         { "output_name": "일상정원", "source_name": "일상정원", "partner_code": "103143", "partner_name": "주식회사 루미호스피탈리티", "manual_review_reason": "월말 조정 가능" },
-        { "output_name": "슈가스컬", "source_name": "슈가스컬", "partner_code": "103143", "partner_name": "주식회사 루미호스피탈리티", "manual_review_reason": "배달/추가 조정 가능" },
+        { "output_name": "슈가스컬", "source_name": "슈가스컬", "partner_code": "103143", "partner_name": "주식회사 루미호스피탈리티", "enabled": false, "manual_review_reason": "자동 생성 제외" },
         { "output_name": "LIG홈앤밀", "source_name": "한와담 서울역점", "partner_code": "088180", "partner_name": "㈜LIG홈앤밀" },
         { "output_name": "함루", "source_name": "함루 서울역점", "partner_code": "003376", "partner_name": "주식회사 레버리치 파트너스" },
         { "output_name": "서울리에", "source_name": "서울리에", "partner_code": "001929", "partner_name": "㈜윤월드푸드코리아" },
@@ -47,7 +47,7 @@
         { "output_name": "벤슨", "source_name": "벤슨 서울역점", "partner_code": "003799", "partner_name": "㈜베러스쿱크리머리", "manual_review_reason": "전자화폐/추가 조정 가능" },
         { "output_name": "도레도레", "source_name": "도레도레 서울역점", "partner_code": "068405", "partner_name": "도레도레", "manual_review_reason": "전자화폐/추가 조정 가능" },
         { "output_name": "부창제과", "source_name": "부창제과", "partner_code": "001493", "partner_name": "주식회사 에프지푸드" },
-        { "output_name": "블루보틀", "source_name": "블루보틀 서울역", "partner_code": "001195", "partner_name": "블루보틀커피코리아유한회사", "manual_review_reason": "추가 할인 조정 가능" },
+        { "output_name": "블루보틀", "source_name": "블루보틀 서울역", "partner_code": "001195", "partner_name": "블루보틀커피코리아유한회사", "enabled": false, "manual_review_reason": "자동 생성 제외" },
         { "output_name": "프레퍼스", "source_name": "프레퍼스", "partner_code": "063224", "partner_name": "㈜서플라이스", "enabled": false, "manual_review_reason": "자동 생성 제외" },
         { "output_name": "밀본", "source_name": "밀본", "partner_code": "001672", "partner_name": "주식회사 씨에이치인터내셔날", "enabled": false, "manual_review_reason": "자동 생성 제외" }
       ]

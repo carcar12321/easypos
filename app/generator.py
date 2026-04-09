@@ -647,7 +647,12 @@ def generate_voucher(
         if row.gross_sales or row.discount_amount or row.cash_sales or row.electronic_money_sales
     }
     active_source_names = business.source_store_names
-    skipped = sorted(input_store_names - active_source_names)
+    intentionally_excluded_source_names = {
+        store.source_name
+        for store in business.stores
+        if not store.enabled
+    }
+    skipped = sorted(input_store_names - active_source_names - intentionally_excluded_source_names)
     if skipped:
         notes.append("자동 생성 제외 매장(입력에는 존재): " + ", ".join(skipped))
 

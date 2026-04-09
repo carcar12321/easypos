@@ -134,6 +134,14 @@ def _normalize_store_key(value: str) -> str:
     return normalized.strip()
 
 
+def _normalize_status_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return str(value).strip().replace(" ", "")
+    return value.strip().replace(" ", "")
+
+
 def _find_card_sheet(path: Path):
     workbook = load_workbook(path, data_only=True)
     required_headers = {"가맹점명", "구분", "승인일자", "카드사명", "승인금액"}
@@ -158,7 +166,7 @@ def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = F
     if approval_number_column is not None:
         for row_index in range(header_row_index + 1, worksheet.max_row + 1):
             status = worksheet.cell(row_index, headers["구분"]).value
-            if str(status).strip() != "취소":
+            if _normalize_status_text(status) != "취소":
                 continue
 
             approval_number = worksheet.cell(row_index, approval_number_column).value
@@ -187,7 +195,7 @@ def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = F
             continue
 
         # 카드매출은 승인건만 반영하고, 같은 승인번호로 취소된 건은 제외한다.
-        if str(status).strip() != "승인":
+        if _normalize_status_text(status) != "승인":
             continue
 
         if approval_number_column is not None:
