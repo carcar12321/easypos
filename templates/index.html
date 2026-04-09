@@ -169,6 +169,11 @@
           <input id="template_file" name="template_file" type="file" accept=".xlsx">
           <div class="hint">업로드하지 않으면 프로젝트 기본 템플릿(`자동전표 양식.xlsx`)을 사용합니다.</div>
         </div>
+        <div class="field">
+          <label for="sales_template_file_generate">매출 양식 템플릿 파일 (선택)</label>
+          <input id="sales_template_file_generate" name="sales_template_file" type="file" accept=".xlsx">
+          <div class="hint">업로드하지 않으면 프로젝트 기본 매출 양식 템플릿(`*임대을매출*POS매출*.xlsx`)을 사용합니다.</div>
+        </div>
         <button type="submit">결과 파일 생성</button>
       </form>
 
@@ -182,8 +187,12 @@
       {% if result %}
       <section class="result">
         <h2>생성 완료</h2>
-        <div><strong>{{ result.output_filename }}</strong> 파일을 만들었습니다.</div>
-        <a class="download" href="/download/{{ result.id }}">다운로드</a>
+        <div><strong>{{ result.output_filename }}</strong> (자동전표) 파일을 만들었습니다.</div>
+        <a class="download" href="/download/{{ result.id }}">자동전표 다운로드</a>
+        {% if result.sales_output_filename and result.sales_input_id %}
+        <div style="margin-top: 10px;"><strong>{{ result.sales_output_filename }}</strong> (매출양식 자동입력) 파일을 만들었습니다.</div>
+        <a class="download" href="/download-sales-input/{{ result.sales_input_id }}">매출양식 다운로드</a>
+        {% endif %}
         {% if result.generated_store_names %}
         <h2 style="margin-top:18px;">생성된 매장</h2>
         <ul>
@@ -205,7 +214,7 @@
 
       <hr class="divider">
 
-      <h2 class="section-title">매출 양식(.xlsb) 자동 입력 파일 생성</h2>
+      <h2 class="section-title">매출 양식 자동 입력 파일 생성</h2>
       <form method="post" action="/generate-sales-input" enctype="multipart/form-data">
         <div class="field">
           <label for="sales_business_key">사업장</label>
@@ -216,32 +225,35 @@
           </select>
         </div>
         <div class="field">
-          <label for="sales_date_from_input">시작일자 (선택)</label>
+          <label for="sales_account_date_input">회계일자 (선택)</label>
           <input
-            id="sales_date_from_input"
-            name="sales_date_from_input"
+            id="sales_account_date_input"
+            name="sales_account_date_input"
             type="text"
             inputmode="numeric"
-            placeholder="예: 20260301 또는 260301"
-            value="{{ sales_date_from_input }}"
+            placeholder="예: 20260329 또는 260329"
+            value="{{ sales_account_date_input }}"
           >
+          <div class="hint">비워두면 업로드 파일에서 회계일자를 자동 판별합니다.</div>
         </div>
         <div class="field">
-          <label for="sales_date_to_input">종료일자 (선택)</label>
-          <input
-            id="sales_date_to_input"
-            name="sales_date_to_input"
-            type="text"
-            inputmode="numeric"
-            placeholder="예: 20260331 또는 260331"
-            value="{{ sales_date_to_input }}"
-          >
-          <div class="hint">비워두면 전체 날짜를 추출합니다. 자동전표 대상 매장 외 시트는 자동으로 제외합니다.</div>
+          <label for="card_sales_file_sales">카드매출 파일</label>
+          <input id="card_sales_file_sales" name="card_sales_file_sales" type="file" accept=".xlsx" required>
         </div>
         <div class="field">
-          <label for="sales_format_file">매출 양식 파일</label>
-          <input id="sales_format_file" name="sales_format_file" type="file" accept=".xlsb" required>
-          <div class="hint">출력 형식: `easypos 업체 제출` 입력 컬럼(일자/가맹점/코드/카드/현금/할인)</div>
+          <label for="daily_sales_file_sales">매장별 당일 매출내역 파일</label>
+          <input id="daily_sales_file_sales" name="daily_sales_file_sales" type="file" accept=".xlsx" required>
+        </div>
+        <div class="field">
+          <label for="settlement_order_file_sales">정산주문목록 파일 (선택)</label>
+          <input id="settlement_order_file_sales" name="settlement_order_file_sales" type="file" accept=".xlsx">
+          <div class="hint">업로드하면 정산 금액을 매출양식 자동입력에 대체 방식으로 반영합니다.</div>
+        </div>
+        <div class="field">
+          <label for="sales_template_file">매출 양식 템플릿 파일 (선택)</label>
+          <input id="sales_template_file" name="sales_template_file" type="file" accept=".xlsx">
+          <div class="hint">업로드하지 않으면 프로젝트 기본 매출 양식 템플릿(`*임대을매출*POS매출*.xlsx`)을 사용합니다.</div>
+          <div class="hint">결과 파일 맨 앞에는 `(회계일자) 검증` 시트가 자동 추가됩니다.</div>
         </div>
         <button type="submit">자동 입력 파일 생성</button>
       </form>
@@ -257,9 +269,25 @@
       <section class="result">
         <h2>자동 입력 생성 완료</h2>
         <div><strong>{{ sales_input_result.output_filename }}</strong> 파일을 만들었습니다.</div>
-        <div style="margin-top: 8px;">행 수: {{ sales_input_result.row_count }} / 매장 수: {{ sales_input_result.store_count }}</div>
-        <div>날짜 범위: {{ sales_input_result.date_min }} ~ {{ sales_input_result.date_max }}</div>
+        <div style="margin-top: 8px;">회계일자: {{ sales_input_result.account_date }}</div>
+        <div>자동 입력 매장 수: {{ sales_input_result.filled_store_count }}</div>
         <a class="download" href="/download-sales-input/{{ sales_input_result.id }}">다운로드</a>
+        {% if sales_input_result.filled_store_names %}
+        <h2 style="margin-top:18px;">자동 입력 매장</h2>
+        <ul>
+          {% for name in sales_input_result.filled_store_names %}
+          <li>{{ name }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if sales_input_result.skipped_store_names %}
+        <h2 style="margin-top:18px;">수기 처리 매장</h2>
+        <ul>
+          {% for name in sales_input_result.skipped_store_names %}
+          <li>{{ name }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
         {% if sales_input_result.notes %}
         <h2 style="margin-top:18px;">확인 메모</h2>
         <ul>

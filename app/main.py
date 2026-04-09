@@ -13,9 +13,9 @@ from fastapi.templating import Jinja2Templates
 from app.config import AppConfig, load_config, load_store_name_mapping
 from app.generator import (
     GenerationArtifact,
-    SalesFormatInputArtifact,
+    SalesTemplateFillArtifact,
     SettlementVerificationArtifact,
-    generate_sales_input_from_sales_format,
+    generate_sales_template_auto_input,
     generate_voucher,
     save_upload_to_tempfile,
     verify_settlement_against_voucher,
@@ -27,6 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config" / "voucher_config.json"
 STORE_NAME_MAPPING_PATH = BASE_DIR / "config" / "store_name_mapping.json"
 DEFAULT_TEMPLATE_PATH = BASE_DIR / "자동전표 양식.xlsx"
+DEFAULT_VALIDATION_TEMPLATE_PATH = BASE_DIR / "검증시트.xlsx"
 GENERATED_DIR = BASE_DIR / ".generated"
 GENERATED_DIR.mkdir(exist_ok=True)
 
@@ -46,7 +47,7 @@ RESULTS: dict[str, ResultRecord] = {}
 
 @dataclass(frozen=True)
 class SalesInputResultRecord:
-    artifact: SalesFormatInputArtifact
+    artifact: SalesTemplateFillArtifact
 
 
 SALES_INPUT_RESULTS: dict[str, SalesInputResultRecord] = {}
@@ -60,8 +61,7 @@ def _base_context() -> dict[str, object]:
         "account_date_input": "",
         "sales_input_result": None,
         "sales_input_error": None,
-        "sales_date_from_input": "",
-        "sales_date_to_input": "",
+        "sales_account_date_input": "",
         "verify_result": None,
         "verify_error": None,
         "verify_account_date_input": "",
@@ -85,6 +85,26 @@ def _normalize_account_date_input(raw_value: str) -> str | None:
     return digits
 
 
+def _find_default_sales_template_path() -> Path | None:
+    candidates = sorted(BASE_DIR.glob("*임대을매출*POS매출*.xlsx"))
+    if not candidates:
+        return None
+    return candidates[-1]
+
+
+def _find_default_validation_template_path() -> Path | None:
+    candidates = [
+        DEFAULT_VALIDATION_TEMPLATE_PATH,
+        BASE_DIR / "validation_template.xlsx",
+        BASE_DIR / "config" / "검증시트.xlsx",
+        BASE_DIR / "config" / "validation_template.xlsx",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html", _base_context())
@@ -99,6 +119,7 @@ async def generate(
     daily_sales_file: UploadFile = File(...),
     settlement_order_file: UploadFile | None = File(default=None),
     template_file: UploadFile | None = File(default=None),
+    sales_template_file: UploadFile | None = File(default=None),
 ) -> HTMLResponse:
     business = config.businesses.get(business_key)
     if not business:
@@ -127,6 +148,19 @@ async def generate(
                 )
             template_path = DEFAULT_TEMPLATE_PATH
 
+        if sales_template_file and sales_template_file.filename:
+            sales_template_path = save_upload_to_tempfile(
+                sales_template_file.filename,
+                await sales_template_file.read(),
+            )
+        else:
+            default_sales_template_path = _find_default_sales_template_path()
+            if default_sales_template_path is None:
+                raise ParsingError(
+                    "기본 매출 양식 템플릿을 찾지 못했습니다. 매출 양식 파일을 직접 업로드해 주세요."
+                )
+            sales_template_path = default_sales_template_path
+
         artifact = generate_voucher(
             business=business,
             card_file_path=card_path,
@@ -135,6 +169,18 @@ async def generate(
             config=config,
             output_dir=GENERATED_DIR,
             manual_account_date=manual_account_date,
+            settlement_order_file_path=settlement_path,
+            settlement_store_aliases=store_name_mapping.get(business_key, {}),
+        )
+        sales_artifact = generate_sales_template_auto_input(
+            business=business,
+            card_file_path=card_path,
+            daily_file_path=daily_path,
+            sales_template_file_path=sales_template_path,
+            config=config,
+            output_dir=GENERATED_DIR,
+            manual_account_date=manual_account_date,
+            validation_template_file_path=_find_default_validation_template_path(),
             settlement_order_file_path=settlement_path,
             settlement_store_aliases=store_name_mapping.get(business_key, {}),
         )
@@ -151,13 +197,17 @@ async def generate(
 
     result_id = uuid4().hex
     RESULTS[result_id] = ResultRecord(artifact=artifact)
+    sales_result_id = uuid4().hex
+    SALES_INPUT_RESULTS[sales_result_id] = SalesInputResultRecord(artifact=sales_artifact)
     context = _base_context()
     context["account_date_input"] = account_date_input
     context["result"] = {
         "id": result_id,
         "output_filename": artifact.output_filename,
+        "sales_input_id": sales_result_id,
+        "sales_output_filename": sales_artifact.output_filename,
         "generated_store_names": artifact.generated_store_names,
-        "notes": artifact.notes,
+        "notes": tuple(artifact.notes) + tuple(sales_artifact.notes),
     }
     return templates.TemplateResponse(
         request,
@@ -170,36 +220,65 @@ async def generate(
 async def generate_sales_input(
     request: Request,
     business_key: str = Form(...),
-    sales_date_from_input: str = Form(default=""),
-    sales_date_to_input: str = Form(default=""),
-    sales_format_file: UploadFile = File(...),
+    sales_account_date_input: str = Form(default=""),
+    card_sales_file_sales: UploadFile = File(...),
+    daily_sales_file_sales: UploadFile = File(...),
+    settlement_order_file_sales: UploadFile | None = File(default=None),
+    sales_template_file: UploadFile | None = File(default=None),
 ) -> HTMLResponse:
     business = config.businesses.get(business_key)
     if not business:
         raise HTTPException(status_code=400, detail="알 수 없는 사업장입니다.")
-    if not sales_format_file.filename:
+    if not card_sales_file_sales.filename or not daily_sales_file_sales.filename:
         raise HTTPException(status_code=400, detail="업로드 파일명이 비어 있습니다.")
 
     context = _base_context()
-    context["sales_date_from_input"] = sales_date_from_input
-    context["sales_date_to_input"] = sales_date_to_input
+    context["sales_account_date_input"] = sales_account_date_input
 
     try:
-        date_from = _normalize_account_date_input(sales_date_from_input) if sales_date_from_input.strip() else None
-        date_to = _normalize_account_date_input(sales_date_to_input) if sales_date_to_input.strip() else None
-        if date_from and date_to and date_from > date_to:
-            raise ParsingError("날짜 범위가 올바르지 않습니다. 시작일은 종료일보다 이전이어야 합니다.")
-
-        sales_format_path = save_upload_to_tempfile(
-            sales_format_file.filename,
-            await sales_format_file.read(),
+        manual_account_date = (
+            _normalize_account_date_input(sales_account_date_input) if sales_account_date_input.strip() else None
         )
-        artifact = generate_sales_input_from_sales_format(
+
+        card_path = save_upload_to_tempfile(
+            card_sales_file_sales.filename,
+            await card_sales_file_sales.read(),
+        )
+        daily_path = save_upload_to_tempfile(
+            daily_sales_file_sales.filename,
+            await daily_sales_file_sales.read(),
+        )
+        settlement_path: Path | None = None
+        if settlement_order_file_sales and settlement_order_file_sales.filename:
+            settlement_path = save_upload_to_tempfile(
+                settlement_order_file_sales.filename,
+                await settlement_order_file_sales.read(),
+            )
+
+        if sales_template_file and sales_template_file.filename:
+            sales_template_path = save_upload_to_tempfile(
+                sales_template_file.filename,
+                await sales_template_file.read(),
+            )
+        else:
+            default_sales_template_path = _find_default_sales_template_path()
+            if default_sales_template_path is None:
+                raise ParsingError(
+                    "기본 매출 양식 템플릿을 찾지 못했습니다. 매출 양식 파일을 직접 업로드해 주세요."
+                )
+            sales_template_path = default_sales_template_path
+
+        artifact = generate_sales_template_auto_input(
             business=business,
-            sales_format_file_path=sales_format_path,
+            card_file_path=card_path,
+            daily_file_path=daily_path,
+            sales_template_file_path=sales_template_path,
+            config=config,
             output_dir=GENERATED_DIR,
-            date_from=date_from,
-            date_to=date_to,
+            manual_account_date=manual_account_date,
+            validation_template_file_path=_find_default_validation_template_path(),
+            settlement_order_file_path=settlement_path,
+            settlement_store_aliases=store_name_mapping.get(business_key, {}),
         )
     except ParsingError as error:
         context["sales_input_error"] = str(error)
@@ -210,10 +289,10 @@ async def generate_sales_input(
     context["sales_input_result"] = {
         "id": result_id,
         "output_filename": artifact.output_filename,
-        "row_count": artifact.row_count,
-        "store_count": artifact.store_count,
-        "date_min": artifact.date_min,
-        "date_max": artifact.date_max,
+        "account_date": artifact.account_date,
+        "filled_store_names": artifact.filled_store_names,
+        "filled_store_count": len(artifact.filled_store_names),
+        "skipped_store_names": artifact.skipped_store_names,
         "notes": artifact.notes,
     }
     return templates.TemplateResponse(request, "index.html", context)
