@@ -158,24 +158,8 @@ def _find_card_sheet(path: Path):
 def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = False) -> ParsedCardSales:
     worksheet, headers, header_row_index = _find_card_sheet(path)
     payment_by_source = config.payment_by_source_card_name
-    approval_number_column = headers.get("승인번호")
     by_store: dict[str, dict[str, float]] = {}
     account_date: str | None = None
-    canceled_approval_numbers: set[str] = set()
-
-    if approval_number_column is not None:
-        for row_index in range(header_row_index + 1, worksheet.max_row + 1):
-            status = worksheet.cell(row_index, headers["구분"]).value
-            if _normalize_status_text(status) != "취소":
-                continue
-
-            approval_number = worksheet.cell(row_index, approval_number_column).value
-            if approval_number is None:
-                continue
-
-            approval_number_text = str(approval_number).strip()
-            if approval_number_text:
-                canceled_approval_numbers.add(approval_number_text)
 
     for row_index in range(header_row_index + 1, worksheet.max_row + 1):
         store_name = worksheet.cell(row_index, headers["가맹점명"]).value
@@ -194,18 +178,16 @@ def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = F
         if payment is None:
             continue
 
-        # 카드매출은 승인건만 반영하고, 같은 승인번호로 취소된 건은 제외한다.
-        if _normalize_status_text(status) != "승인":
+        normalized_status = _normalize_status_text(status)
+        if normalized_status == "승인":
+            signed_amount = float(amount)
+        elif normalized_status == "취소":
+            signed_amount = -float(amount)
+        else:
             continue
 
-        if approval_number_column is not None:
-            approval_number = worksheet.cell(row_index, approval_number_column).value
-            approval_number_text = str(approval_number).strip() if approval_number is not None else ""
-            if approval_number_text and approval_number_text in canceled_approval_numbers:
-                continue
-
         store_bucket = by_store.setdefault(str(store_name), {})
-        store_bucket[payment.key] = store_bucket.get(payment.key, 0.0) + float(amount)
+        store_bucket[payment.key] = store_bucket.get(payment.key, 0.0) + signed_amount
 
     if account_date is None and not allow_missing_date:
         raise ParsingError(f"카드매출 파일에서 회계일을 찾지 못했습니다: {path.name}")
