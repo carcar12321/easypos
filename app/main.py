@@ -77,21 +77,28 @@ def _base_context() -> dict[str, object]:
     }
 
 
-def _normalize_account_date_input(raw_value: str) -> str | None:
+def _normalize_account_date_input(raw_value: str) -> str:
     value = raw_value.strip()
     if not value:
-        return None
+        raise ParsingError("회계일자는 YYYYMMDD 형식으로 반드시 입력해 주세요.")
 
-    digits = re.sub(r"[^0-9]", "", value)
-    if len(digits) == 6:
-        digits = f"20{digits}"
-    if len(digits) != 8:
-        raise ParsingError("회계일자는 YYYYMMDD 또는 YYMMDD 형태로 입력해 주세요.")
+    if not re.fullmatch(r"\d{8}", value):
+        raise ParsingError("회계일자는 YYYYMMDD 8자리 숫자로 입력해 주세요. 예: 20260329")
     try:
-        datetime.strptime(digits, "%Y%m%d")
+        datetime.strptime(value, "%Y%m%d")
     except ValueError as error:
-        raise ParsingError("유효하지 않은 회계일자입니다. 예: 20260329 또는 260329") from error
-    return digits
+        raise ParsingError("유효하지 않은 회계일자입니다. 예: 20260329") from error
+    return value
+
+
+def _is_openxml_xlsx(path: Path) -> bool:
+    if not path.exists() or path.suffix.lower() != ".xlsx":
+        return False
+    try:
+        with path.open("rb") as handle:
+            return handle.read(4) == b"PK\x03\x04"
+    except OSError:
+        return False
 
 
 def _find_default_sales_template_path() -> Path | None:
@@ -103,13 +110,13 @@ def _find_default_sales_template_path() -> Path | None:
 
 def _find_default_validation_template_path() -> Path | None:
     candidates = [
-        DEFAULT_VALIDATION_TEMPLATE_PATH,
         BASE_DIR / "validation_template.xlsx",
+        DEFAULT_VALIDATION_TEMPLATE_PATH,
         BASE_DIR / "config" / "검증시트.xlsx",
         BASE_DIR / "config" / "validation_template.xlsx",
     ]
     for candidate in candidates:
-        if candidate.exists():
+        if _is_openxml_xlsx(candidate):
             return candidate
     return None
 
@@ -123,7 +130,7 @@ async def index(request: Request) -> HTMLResponse:
 async def generate(
     request: Request,
     business_key: str = Form(...),
-    account_date_input: str = Form(default=""),
+    account_date_input: str = Form(...),
     card_sales_file: UploadFile = File(...),
     daily_sales_file: UploadFile = File(...),
     settlement_order_file: UploadFile | None = File(default=None),
@@ -231,7 +238,7 @@ async def generate(
 async def generate_sales_input(
     request: Request,
     business_key: str = Form(...),
-    sales_account_date_input: str = Form(default=""),
+    sales_account_date_input: str = Form(...),
     card_sales_file_sales: UploadFile = File(...),
     daily_sales_file_sales: UploadFile = File(...),
     settlement_order_file_sales: UploadFile | None = File(default=None),
@@ -248,9 +255,7 @@ async def generate_sales_input(
     context["sales_account_date_input"] = sales_account_date_input
 
     try:
-        manual_account_date = (
-            _normalize_account_date_input(sales_account_date_input) if sales_account_date_input.strip() else None
-        )
+        manual_account_date = _normalize_account_date_input(sales_account_date_input)
 
         card_path = save_upload_to_tempfile(
             card_sales_file_sales.filename,
@@ -314,7 +319,7 @@ async def generate_sales_input(
 async def verify_settlement(
     request: Request,
     business_key: str = Form(...),
-    verify_account_date_input: str = Form(default=""),
+    verify_account_date_input: str = Form(...),
     voucher_file: UploadFile = File(...),
     settlement_order_file_verify: UploadFile = File(...),
 ) -> HTMLResponse:

@@ -212,16 +212,18 @@
         </div>
 
         <div class="field">
-          <label for="account_date_input">회계일자 (선택)</label>
+          <label for="account_date_input">회계일자 (YYYYMMDD)</label>
           <input
             id="account_date_input"
             name="account_date_input"
             type="text"
             inputmode="numeric"
-            placeholder="예: 20260329 또는 260329"
+            placeholder="예: 20260329"
+            pattern="\d{8}"
+            required
             value="{{ account_date_input }}"
           >
-          <div class="hint">항상 사용자 입력값을 우선으로 사용합니다. 비우면 파일에서 회계일자를 찾습니다.</div>
+          <div class="hint">회계일자는 YYYYMMDD 8자리 숫자로 입력해 주세요.</div>
         </div>
 
         <div class="field">

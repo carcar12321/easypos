@@ -442,8 +442,8 @@ def _find_template_row_for_account_date(worksheet, account_date: str) -> int | N
     return None
 
 
-def _sales_template_output_filename(template_file_path: Path, account_date: str) -> str:
-    return f"{template_file_path.stem}_{account_date}_자동입력.xlsx"
+def _sales_template_output_filename(*, business: BusinessConfig, account_date: str) -> str:
+    return f"{account_date}{business.display_name}매출내역.xlsx"
 
 
 def _copy_validation_template_sheet(template_path: Path, workbook, sheet_title: str):
@@ -504,23 +504,28 @@ def _create_validation_sheet(
     account_date: str,
     validation_rows: list[dict[str, Any]],
     validation_template_file_path: Path | None,
-) -> None:
+) -> str | None:
     sheet_title = f"({account_date}) 검증"
     if sheet_title in workbook.sheetnames:
         del workbook[sheet_title]
 
     template_exists = validation_template_file_path is not None and validation_template_file_path.exists()
+    note: str | None = None
     if template_exists:
-        worksheet = _copy_validation_template_sheet(validation_template_file_path, workbook, sheet_title)
+        try:
+            worksheet = _copy_validation_template_sheet(validation_template_file_path, workbook, sheet_title)
+        except Exception:
+            worksheet = workbook.create_sheet(title=sheet_title, index=0)
+            note = "검증시트 템플릿을 읽지 못해 기본 헤더로 검증 시트를 생성했습니다."
     else:
         worksheet = workbook.create_sheet(title=sheet_title, index=0)
+        note = "검증시트 템플릿을 찾지 못해 기본 헤더로 검증 시트를 생성했습니다."
 
     worksheet.cell(1, 1).value = "일자"
-    worksheet.cell(1, 2).value = datetime.strptime(account_date, "%Y%m%d").date()
+    worksheet.cell(1, 2).value = account_date
 
     for column_index, header in enumerate(VALIDATION_HEADER_COLUMNS, start=1):
-        if worksheet.cell(2, column_index).value is None:
-            worksheet.cell(2, column_index).value = header
+        worksheet.cell(2, column_index).value = header
 
     if worksheet.max_row >= 3:
         worksheet.delete_rows(3, worksheet.max_row - 2)
@@ -542,6 +547,8 @@ def _create_validation_sheet(
         worksheet.cell(row_index, 22).value = f"=SUM(M{row_index}:U{row_index})"
         worksheet.cell(row_index, 23).value = float(row["card_sales"])
         worksheet.cell(row_index, 24).value = f"=V{row_index}=W{row_index}"
+
+    return note
 
 
 def generate_voucher(
@@ -656,7 +663,7 @@ def generate_voucher(
     if skipped:
         notes.append("자동 생성 제외 매장(입력에는 존재): " + ", ".join(skipped))
 
-    output_filename = f"{business.display_name}POS매장임대을매출_{account_date}.xlsx"
+    output_filename = f"{account_date}{business.display_name}자동전표.xlsx"
     output_path = output_dir / output_filename
     _write_output(template_file_path, output_path, lines)
 
@@ -808,9 +815,9 @@ def generate_sales_template_auto_input(
     if not filled_store_names:
         raise ParsingError("채워 넣을 매장이 없습니다. 시트명/매장명 매핑 또는 입력 파일 내용을 확인해 주세요.")
 
-    output_filename = _sales_template_output_filename(sales_template_file_path, account_date)
+    output_filename = _sales_template_output_filename(business=business, account_date=account_date)
     output_path = output_dir / output_filename
-    _create_validation_sheet(
+    validation_note = _create_validation_sheet(
         workbook=workbook,
         account_date=account_date,
         validation_rows=validation_rows,
@@ -820,8 +827,8 @@ def generate_sales_template_auto_input(
 
     if skipped_store_names:
         notes.append("자동 입력 제외(시트/입력 매칭 실패): " + ", ".join(sorted(set(skipped_store_names))))
-    if validation_template_file_path is None or not validation_template_file_path.exists():
-        notes.append("검증시트 템플릿을 찾지 못해 기본 헤더로 검증 시트를 생성했습니다.")
+    if validation_note:
+        notes.append(validation_note)
     if parsed_settlement is not None:
         if settlement_applied_count:
             notes.append(
