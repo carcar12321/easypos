@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from calendar import monthrange
 from copy import copy
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -442,6 +443,18 @@ def _find_template_row_for_account_date(worksheet, account_date: str) -> int | N
     return None
 
 
+def _rewrite_template_month_dates(worksheet, account_date: str) -> None:
+    base = datetime.strptime(account_date, "%Y%m%d")
+    days_in_month = monthrange(base.year, base.month)[1]
+    for row_index in range(4, 35):
+        day = row_index - 3
+        cell = worksheet.cell(row_index, 1)
+        if day <= days_in_month:
+            cell.value = date(base.year, base.month, day)
+        else:
+            cell.value = None
+
+
 def _sales_template_output_filename(*, business: BusinessConfig, account_date: str) -> str:
     return f"{account_date}{business.display_name}매출내역.xlsx"
 
@@ -729,6 +742,9 @@ def generate_sales_template_auto_input(
 
     filled_store_names: list[str] = []
     skipped_store_names: list[str] = []
+    missing_sheet_store_names: list[str] = []
+    missing_daily_store_names: list[str] = []
+    missing_date_row_store_names: list[str] = []
     validation_rows: list[dict[str, Any]] = []
     settlement_applied_count = 0
     settlement_unapplied_stores: list[str] = []
@@ -737,11 +753,13 @@ def generate_sales_template_auto_input(
         sheet_name = _match_name_from_keys(keys=sheet_names, store=store)
         if sheet_name is None:
             skipped_store_names.append(store.output_name)
+            missing_sheet_store_names.append(store.output_name)
             continue
 
         daily_store_key = _match_name_from_keys(keys=daily_keys, store=store)
         if daily_store_key is None:
             skipped_store_names.append(store.output_name)
+            missing_daily_store_names.append(store.output_name)
             continue
         daily_row = parsed_daily.by_store[daily_store_key]
 
@@ -771,9 +789,11 @@ def generate_sales_template_auto_input(
                 settlement_unapplied = True
 
         worksheet = workbook[sheet_name]
+        _rewrite_template_month_dates(worksheet, account_date)
         target_row = _find_template_row_for_account_date(worksheet, account_date)
         if target_row is None:
             skipped_store_names.append(store.output_name)
+            missing_date_row_store_names.append(store.output_name)
             continue
 
         if settlement_applied:
@@ -813,7 +833,55 @@ def generate_sales_template_auto_input(
         filled_store_names.append(store.output_name)
 
     if not filled_store_names:
-        raise ParsingError("채워 넣을 매장이 없습니다. 시트명/매장명 매핑 또는 입력 파일 내용을 확인해 주세요.")
+        active_count = len(business.active_stores)
+        reason_parts: list[str] = []
+        if len(missing_sheet_store_names) == active_count:
+            reason_parts.append(
+                f"매출양식 파일({sales_template_file_path.name})에서 "
+                f"{business.display_name} 매장 시트를 찾지 못했습니다."
+            )
+        if len(missing_daily_store_names) == active_count:
+            reason_parts.append(
+                f"당일매출 파일({daily_file_path.name})에서 "
+                f"{business.display_name} 매장명을 찾지 못했습니다."
+            )
+        if len(missing_date_row_store_names) == active_count:
+            reason_parts.append(
+                f"매출양식 파일({sales_template_file_path.name})에서 "
+                f"회계일자 {account_date} 행을 찾지 못했습니다."
+            )
+
+        best_other_business: BusinessConfig | None = None
+        best_other_score = -1
+        for other_business in config.businesses.values():
+            if other_business.key == business.key:
+                continue
+            other_sheet_match = sum(
+                1 for store in other_business.active_stores if _match_name_from_keys(keys=sheet_names, store=store)
+            )
+            other_daily_match = sum(
+                1 for store in other_business.active_stores if _match_name_from_keys(keys=daily_keys, store=store)
+            )
+            score = other_sheet_match + other_daily_match
+            if score > best_other_score:
+                best_other_business = other_business
+                best_other_score = score
+        if best_other_business is not None and best_other_score > 0:
+            reason_parts.append(
+                f"사업장 선택 불일치 가능성: 현재={business.display_name}, "
+                f"의심={best_other_business.display_name}"
+            )
+
+        if not reason_parts:
+            reason_parts.append("시트명/매장명 매핑 또는 입력 파일 조합을 확인해 주세요.")
+
+        raise ParsingError(
+            "채워 넣을 매장이 없습니다. "
+            + " ".join(reason_parts)
+            + " "
+            + f"[사업장={business.display_name}, 카드={card_file_path.name}, "
+            + f"당일매출={daily_file_path.name}, 매출양식={sales_template_file_path.name}]"
+        )
 
     output_filename = _sales_template_output_filename(business=business, account_date=account_date)
     output_path = output_dir / output_filename
