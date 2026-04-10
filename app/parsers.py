@@ -114,6 +114,14 @@ def _extract_account_date_from_filename(filename: str) -> str | None:
     if match_6:
         return _normalize_date_digits(match_6.group(1))
 
+    # MMDD만 있는 파일명(예: ...0329.xlsx)은 현재 연도를 붙여 해석한다.
+    match_4 = re.search(r"(?<!\d)(\d{4})(?!\d)", filename)
+    if match_4:
+        candidate = f"{datetime.now().year}{match_4.group(1)}"
+        normalized = _normalize_date_digits(candidate)
+        if normalized:
+            return normalized
+
     return None
 
 
@@ -195,16 +203,59 @@ def parse_card_sales(path: Path, config: AppConfig, allow_missing_date: bool = F
     return ParsedCardSales(account_date=account_date, by_store=by_store)
 
 
-def _parse_daily_sales_new_format(path: Path, worksheet, allow_missing_date: bool) -> ParsedDailySales:
+def _extract_daily_sales_new_headers(worksheet) -> tuple[int, int, dict[str, int]] | None:
     required_headers = {"매장명", "영업일자", "총매출", "할인", "현금매출"}
     extracted = _extract_header_row(worksheet, required_headers, search_rows=5)
+    if extracted is not None:
+        header_row_index, headers = extracted
+        return header_row_index, header_row_index + 1, headers
+
+    search_rows = min(worksheet.max_row - 1, 5)
+    for row_index in range(1, search_rows + 1):
+        first_row_headers: dict[str, int] = {}
+        second_row_headers: dict[str, int] = {}
+        for column_index in range(1, worksheet.max_column + 1):
+            first_row_value = worksheet.cell(row_index, column_index).value
+            second_row_value = worksheet.cell(row_index + 1, column_index).value
+
+            if isinstance(first_row_value, str) and first_row_value.strip():
+                first_row_headers[first_row_value.strip()] = column_index
+            if isinstance(second_row_value, str) and second_row_value.strip():
+                second_row_headers[second_row_value.strip()] = column_index
+
+        headers: dict[str, int] = {}
+        if "매장명" in first_row_headers:
+            headers["매장명"] = first_row_headers["매장명"]
+        if "영업일자" in first_row_headers:
+            headers["영업일자"] = first_row_headers["영업일자"]
+        if "총매출" in first_row_headers:
+            headers["총매출"] = first_row_headers["총매출"]
+        if "할인" in first_row_headers:
+            headers["할인"] = first_row_headers["할인"]
+
+        if "현금매출" in second_row_headers:
+            headers["현금매출"] = second_row_headers["현금매출"]
+        if "전자화폐" in second_row_headers:
+            headers["전자화폐"] = second_row_headers["전자화폐"]
+        elif "전자화폐매출" in second_row_headers:
+            headers["전자화폐"] = second_row_headers["전자화폐매출"]
+
+        required_two_row_headers = {"매장명", "총매출", "할인", "현금매출"}
+        if required_two_row_headers.issubset(headers):
+            return row_index, row_index + 2, headers
+
+    return None
+
+
+def _parse_daily_sales_new_format(path: Path, worksheet, allow_missing_date: bool) -> ParsedDailySales:
+    extracted = _extract_daily_sales_new_headers(worksheet)
     if extracted is None:
         raise ParsingError(f"새양식 매출내역 헤더를 찾지 못했습니다: {path.name}")
-    header_row_index, headers = extracted
+    header_row_index, data_start_row_index, headers = extracted
 
     account_date = _extract_account_date_from_filename(path.name)
-    if account_date is None:
-        for row_index in range(header_row_index + 1, worksheet.max_row + 1):
+    if account_date is None and "영업일자" in headers:
+        for row_index in range(data_start_row_index, worksheet.max_row + 1):
             row_account_date = _as_yyyymmdd(worksheet.cell(row_index, headers["영업일자"]).value)
             if row_account_date:
                 account_date = row_account_date
@@ -214,12 +265,19 @@ def _parse_daily_sales_new_format(path: Path, worksheet, allow_missing_date: boo
         raise ParsingError(f"새양식 파일에서 회계일을 찾지 못했습니다: {path.name}")
 
     by_store: dict[str, DailySalesRow] = {}
-    for row_index in range(header_row_index + 1, worksheet.max_row + 1):
+    for row_index in range(data_start_row_index, worksheet.max_row + 1):
         source_name = worksheet.cell(row_index, headers["매장명"]).value
         gross_sales = worksheet.cell(row_index, headers["총매출"]).value
         discount_amount = worksheet.cell(row_index, headers["할인"]).value
         cash_sales = worksheet.cell(row_index, headers["현금매출"]).value
-        row_account_date = _as_yyyymmdd(worksheet.cell(row_index, headers["영업일자"]).value)
+        electronic_money_sales = (
+            worksheet.cell(row_index, headers["전자화폐"]).value if "전자화폐" in headers else 0.0
+        )
+        row_account_date = (
+            _as_yyyymmdd(worksheet.cell(row_index, headers["영업일자"]).value)
+            if "영업일자" in headers
+            else None
+        )
 
         if not isinstance(source_name, str) or not source_name.strip():
             continue
@@ -236,7 +294,7 @@ def _parse_daily_sales_new_format(path: Path, worksheet, allow_missing_date: boo
                 gross_sales=float(gross_sales or 0.0),
                 discount_amount=float(discount_amount or 0.0),
                 cash_sales=float(cash_sales or 0.0),
-                electronic_money_sales=0.0,
+                electronic_money_sales=float(electronic_money_sales or 0.0),
             )
             continue
 
@@ -245,7 +303,7 @@ def _parse_daily_sales_new_format(path: Path, worksheet, allow_missing_date: boo
             gross_sales=current.gross_sales + float(gross_sales or 0.0),
             discount_amount=current.discount_amount + float(discount_amount or 0.0),
             cash_sales=current.cash_sales + float(cash_sales or 0.0),
-            electronic_money_sales=current.electronic_money_sales,
+            electronic_money_sales=current.electronic_money_sales + float(electronic_money_sales or 0.0),
         )
 
     return ParsedDailySales(account_date=account_date, by_store=by_store)
@@ -282,8 +340,7 @@ def parse_daily_sales(path: Path, allow_missing_date: bool = False) -> ParsedDai
     workbook = load_workbook(path, data_only=True)
     worksheet = workbook.worksheets[0]
 
-    new_format_headers = {"매장명", "영업일자", "총매출", "할인", "현금매출"}
-    if _extract_header_row(worksheet, new_format_headers, search_rows=5) is not None:
+    if _extract_daily_sales_new_headers(worksheet) is not None:
         return _parse_daily_sales_new_format(path, worksheet, allow_missing_date)
     return _parse_daily_sales_legacy_format(path, worksheet, allow_missing_date)
 
