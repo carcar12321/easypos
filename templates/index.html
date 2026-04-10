@@ -3,64 +3,85 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>POS Voucher Generator</title>
+  <title>EasyDSD</title>
   <style>
     :root {
-      --bg: #f4efe6;
-      --card: #fffdf8;
-      --line: #d9ceb9;
-      --text: #1f1b15;
-      --muted: #6e6457;
-      --accent: #8f4a20;
-      --accent-soft: #f2e2d1;
-      --danger: #9a3a2c;
+      --bg: #f3f5f9;
+      --panel: #ffffff;
+      --line: #d9dfeb;
+      --text: #1b2430;
+      --muted: #657089;
+      --brand: #214ea6;
+      --brand-2: #17858a;
+      --accent-bg: #e9eef9;
+      --ok-bg: #ecf6ef;
+      --ok-line: #b4d8be;
+      --err-bg: #fff1ef;
+      --err-line: #efb3ac;
+      --err-text: #9a3a2c;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       color: var(--text);
       font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif;
       background:
-        radial-gradient(circle at 90% 0%, rgba(143, 74, 32, 0.14), transparent 35%),
-        linear-gradient(180deg, #efe7d9 0%, var(--bg) 100%);
+        radial-gradient(circle at 0% -30%, rgba(33, 78, 166, 0.2), transparent 45%),
+        linear-gradient(180deg, #f5f8ff 0%, var(--bg) 70%);
       min-height: 100vh;
     }
+
     .wrap {
       width: min(980px, calc(100% - 32px));
       margin: 40px auto 56px;
     }
+
+    .hero {
+      padding: 24px 24px 18px;
+      border-radius: 18px;
+      background: linear-gradient(120deg, #1f4fa8 0%, #1a7b92 100%);
+      color: #fff;
+      box-shadow: 0 14px 28px rgba(27, 36, 48, 0.18);
+    }
+
     .hero h1 {
       margin: 0 0 8px;
-      font-size: clamp(28px, 4vw, 42px);
-      line-height: 1.05;
-      letter-spacing: -0.04em;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.03;
+      letter-spacing: -0.03em;
     }
+
     .hero p {
-      margin: 0 0 22px;
-      color: var(--muted);
-      line-height: 1.6;
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.55;
+      color: rgba(255, 255, 255, 0.92);
     }
+
     .panel {
-      background: var(--card);
+      margin-top: 16px;
+      background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 20px;
       padding: 24px;
-      box-shadow: 0 14px 38px rgba(31, 27, 21, 0.08);
+      box-shadow: 0 12px 32px rgba(27, 36, 48, 0.08);
     }
+
     .section-title {
       margin: 0 0 12px;
-      font-size: 20px;
+      font-size: 21px;
       letter-spacing: -0.02em;
     }
-    .divider {
-      margin: 28px 0;
-      border: 0;
-      border-top: 1px solid var(--line);
-    }
+
     form { display: grid; gap: 16px; }
+
     .field { display: grid; gap: 7px; }
+
     label { font-size: 14px; font-weight: 700; }
-    select, input[type="file"], input[type="text"] {
+
+    input[type="file"], input[type="text"] {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -68,40 +89,78 @@
       font: inherit;
       background: #fff;
     }
+
     .hint {
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.45;
     }
-    button {
+
+    .business-tabs {
+      display: flex;
+      gap: 10px;
+      margin-top: 2px;
+      padding: 6px;
+      background: var(--accent-bg);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      width: fit-content;
+      max-width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .business-tab {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 18px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all .2s ease;
+    }
+
+    .business-tab.is-active {
+      background: linear-gradient(120deg, var(--brand) 0%, var(--brand-2) 100%);
+      color: #fff;
+      box-shadow: 0 6px 16px rgba(33, 78, 166, 0.25);
+    }
+
+    .submit-btn {
       width: fit-content;
       border: 0;
       border-radius: 999px;
       padding: 11px 20px;
-      background: var(--accent);
+      background: var(--brand);
       color: #fff;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
     }
+
     .result, .error {
       margin-top: 20px;
       padding: 16px;
       border-radius: 14px;
     }
+
     .result {
-      background: var(--accent-soft);
-      border: 1px solid #d8b999;
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-line);
     }
+
     .error {
-      background: #fff1ef;
-      border: 1px solid #efb3ac;
-      color: var(--danger);
+      background: var(--err-bg);
+      border: 1px solid var(--err-line);
+      color: var(--err-text);
     }
+
     .result h2, .error h2 {
       margin: 0 0 8px;
       font-size: 18px;
     }
+
     .download {
       display: inline-block;
       margin-top: 10px;
@@ -112,33 +171,46 @@
       padding: 10px 16px;
       font-weight: 700;
     }
+
     ul {
       margin: 10px 0 0;
       padding-left: 18px;
     }
+
     li {
       margin-bottom: 6px;
       line-height: 1.45;
+    }
+
+    @media (max-width: 640px) {
+      .wrap { width: calc(100% - 20px); margin-top: 18px; }
+      .hero { padding: 18px; }
+      .panel { padding: 18px; }
+      .business-tab { width: 100%; text-align: center; }
+      .business-tabs { width: 100%; }
     }
   </style>
 </head>
 <body>
   <main class="wrap">
     <section class="hero">
-      <h1>POS 매장 임대을 매출 자동 생성</h1>
-      <p>카드매출 파일과 매장별 당일 매출내역 파일을 업로드하면 자동전표 업로드용 엑셀을 만듭니다. 프레퍼스/밀본은 자동 생성에서 제외됩니다.</p>
+      <h1>EasyDSD</h1>
+      <p>서울역 / 청량리역 POS 파일을 자동 전표와 매출 양식으로 변환합니다.</p>
     </section>
+
     <section class="panel">
-      <h2 class="section-title">전표 생성</h2>
+      <h2 class="section-title">POS 매출 자동 생성</h2>
+
       <form method="post" action="/generate" enctype="multipart/form-data">
         <div class="field">
-          <label for="business_key">사업장</label>
-          <select id="business_key" name="business_key" required>
-            {% for business in businesses %}
-            <option value="{{ business.key }}">{{ business.display_name }}</option>
-            {% endfor %}
-          </select>
+          <label>사업장</label>
+          <div class="business-tabs" role="tablist" aria-label="사업장 선택">
+            <button type="button" class="business-tab" data-business-key="seoul_station" role="tab" aria-selected="false">① 서울역</button>
+            <button type="button" class="business-tab" data-business-key="cheongnyangni_station" role="tab" aria-selected="false">② 청량리역</button>
+          </div>
+          <input id="business_key" name="business_key" type="hidden" value="{{ selected_business_key }}">
         </div>
+
         <div class="field">
           <label for="account_date_input">회계일자 (선택)</label>
           <input
@@ -149,32 +221,38 @@
             placeholder="예: 20260329 또는 260329"
             value="{{ account_date_input }}"
           >
-          <div class="hint">비워두면 파일에서 회계일자를 자동으로 찾습니다. 못 찾는 경우 직접 입력값을 사용합니다.</div>
+          <div class="hint">항상 사용자 입력값을 우선으로 사용합니다. 비우면 파일에서 회계일자를 찾습니다.</div>
         </div>
+
         <div class="field">
           <label for="card_sales_file">카드매출 파일</label>
           <input id="card_sales_file" name="card_sales_file" type="file" accept=".xlsx" required>
         </div>
+
         <div class="field">
           <label for="daily_sales_file">매장별 당일 매출내역 파일</label>
           <input id="daily_sales_file" name="daily_sales_file" type="file" accept=".xlsx" required>
         </div>
+
         <div class="field">
           <label for="settlement_order_file">정산주문목록 파일 (선택)</label>
           <input id="settlement_order_file" name="settlement_order_file" type="file" accept=".xlsx">
-          <div class="hint">업로드하면 C열(가맹점)과 F열(결제금액) 합계로 매장별 추가 `102700` 라인을 생성합니다.</div>
+          <div class="hint">입력하면 정산 보정 금액까지 반영합니다.</div>
         </div>
+
         <div class="field">
-          <label for="template_file">전표 템플릿 파일 (선택)</label>
+          <label for="template_file">자동전표 양식 파일 (선택)</label>
           <input id="template_file" name="template_file" type="file" accept=".xlsx">
-          <div class="hint">업로드하지 않으면 프로젝트 기본 템플릿(`자동전표 양식.xlsx`)을 사용합니다.</div>
+          <div class="hint">업로드하지 않으면 프로젝트 기본 자동전표 양식을 사용합니다.</div>
         </div>
+
         <div class="field">
-          <label for="sales_template_file_generate">매출 양식 템플릿 파일 (선택)</label>
+          <label for="sales_template_file_generate">매출 양식 파일 (선택)</label>
           <input id="sales_template_file_generate" name="sales_template_file" type="file" accept=".xlsx">
-          <div class="hint">업로드하지 않으면 프로젝트 기본 매출 양식 템플릿(`*임대을매출*POS매출*.xlsx`)을 사용합니다.</div>
+          <div class="hint">업로드하지 않으면 프로젝트 기본 매출 양식을 사용합니다.</div>
         </div>
-        <button type="submit">결과 파일 생성</button>
+
+        <button class="submit-btn" type="submit">결과 파일 생성</button>
       </form>
 
       {% if error %}
@@ -189,10 +267,12 @@
         <h2>생성 완료</h2>
         <div><strong>{{ result.output_filename }}</strong> (자동전표) 파일을 만들었습니다.</div>
         <a class="download" href="/download/{{ result.id }}">자동전표 다운로드</a>
+
         {% if result.sales_output_filename and result.sales_input_id %}
         <div style="margin-top: 10px;"><strong>{{ result.sales_output_filename }}</strong> (매출양식 자동입력) 파일을 만들었습니다.</div>
         <a class="download" href="/download-sales-input/{{ result.sales_input_id }}">매출양식 다운로드</a>
         {% endif %}
+
         {% if result.generated_store_names %}
         <h2 style="margin-top:18px;">생성된 매장</h2>
         <ul>
@@ -201,6 +281,7 @@
           {% endfor %}
         </ul>
         {% endif %}
+
         {% if result.notes %}
         <h2 style="margin-top:18px;">확인 메모</h2>
         <ul>
@@ -213,5 +294,30 @@
       {% endif %}
     </section>
   </main>
+
+  <script>
+    (() => {
+      const tabs = Array.from(document.querySelectorAll(".business-tab"));
+      const hiddenInput = document.getElementById("business_key");
+      if (!tabs.length || !hiddenInput) return;
+
+      const hasKey = (key) => tabs.some((tab) => tab.dataset.businessKey === key);
+
+      const activate = (key) => {
+        hiddenInput.value = key;
+        tabs.forEach((tab) => {
+          const isActive = tab.dataset.businessKey === key;
+          tab.classList.toggle("is-active", isActive);
+          tab.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+      };
+
+      const initialKey = hasKey(hiddenInput.value) ? hiddenInput.value : "seoul_station";
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activate(tab.dataset.businessKey));
+      });
+      activate(initialKey);
+    })();
+  </script>
 </body>
 </html>

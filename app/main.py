@@ -53,9 +53,18 @@ class SalesInputResultRecord:
 SALES_INPUT_RESULTS: dict[str, SalesInputResultRecord] = {}
 
 
+def _default_business_key() -> str:
+    if "seoul_station" in config.businesses:
+        return "seoul_station"
+    if not config.businesses:
+        return ""
+    return sorted(config.businesses.keys())[0]
+
+
 def _base_context() -> dict[str, object]:
     return {
         "businesses": sorted(config.businesses.values(), key=lambda item: item.display_name),
+        "selected_business_key": _default_business_key(),
         "result": None,
         "error": None,
         "account_date_input": "",
@@ -186,6 +195,7 @@ async def generate(
         )
     except ParsingError as error:
         context = _base_context()
+        context["selected_business_key"] = business_key
         context["error"] = str(error)
         context["account_date_input"] = account_date_input
         return templates.TemplateResponse(
@@ -200,6 +210,7 @@ async def generate(
     sales_result_id = uuid4().hex
     SALES_INPUT_RESULTS[sales_result_id] = SalesInputResultRecord(artifact=sales_artifact)
     context = _base_context()
+    context["selected_business_key"] = business_key
     context["account_date_input"] = account_date_input
     context["result"] = {
         "id": result_id,
@@ -233,6 +244,7 @@ async def generate_sales_input(
         raise HTTPException(status_code=400, detail="업로드 파일명이 비어 있습니다.")
 
     context = _base_context()
+    context["selected_business_key"] = business_key
     context["sales_account_date_input"] = sales_account_date_input
 
     try:
@@ -313,6 +325,7 @@ async def verify_settlement(
         raise HTTPException(status_code=400, detail="검증 파일명이 비어 있습니다.")
 
     context = _base_context()
+    context["selected_business_key"] = business_key
     context["verify_account_date_input"] = verify_account_date_input
     try:
         manual_account_date = _normalize_account_date_input(verify_account_date_input)
