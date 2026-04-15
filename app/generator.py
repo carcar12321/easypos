@@ -272,7 +272,7 @@ def _build_store_lines(
         amount=gross_sales_amount,
         partner_cd=store.partner_code,
         partner_nm=store.partner_name,
-        cc_cd="1300",
+        cc_cd=business.cc_cd,
         management_data=None,
         consul_dc=_build_consul_dc(business, account_date) if include_consul_dc else None,
     )
@@ -284,7 +284,7 @@ def _build_store_lines(
             amount=(-1) * discount_amount,
             partner_cd=store.partner_code,
             partner_nm=store.partner_name,
-            cc_cd="1300",
+            cc_cd=business.cc_cd,
             management_data=None,
         )
 
@@ -327,7 +327,12 @@ def _build_store_lines(
     return lines
 
 
-def _write_output(template_path: Path, output_path: Path, lines: list[VoucherLine]) -> None:
+def _write_output(
+    template_path: Path,
+    output_path: Path,
+    lines: list[VoucherLine],
+    force_visible_columns: tuple[str, ...] = (),
+) -> None:
     workbook = load_workbook(template_path)
     worksheet = workbook.worksheets[0]
 
@@ -337,6 +342,9 @@ def _write_output(template_path: Path, output_path: Path, lines: list[VoucherLin
     for row_index, line in enumerate(lines, start=4):
         for column_index, value in enumerate(line.as_row(), start=1):
             worksheet.cell(row_index, column_index).value = value
+
+    for column_letter in force_visible_columns:
+        worksheet.column_dimensions[column_letter].hidden = False
 
     workbook.save(output_path)
 
@@ -678,7 +686,13 @@ def generate_voucher(
 
     output_filename = f"{account_date}{business.display_name}자동전표.xlsx"
     output_path = output_dir / output_filename
-    _write_output(template_file_path, output_path, lines)
+    force_visible_columns = ("A", "B") if business.key == "cheongnyangni_station" else ()
+    _write_output(
+        template_file_path,
+        output_path,
+        lines,
+        force_visible_columns=force_visible_columns,
+    )
 
     return GenerationArtifact(
         output_path=output_path,

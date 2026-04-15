@@ -33,6 +33,7 @@ class BusinessConfig:
     key: str
     display_name: str
     doc_prefix: str
+    cc_cd: str
     consul_dc_format: str
     note_dc_format: str
     company_code: str
@@ -95,6 +96,7 @@ def _load_business(key: str, raw: dict[str, Any]) -> BusinessConfig:
         key=key,
         display_name=raw["display_name"],
         doc_prefix=raw["doc_prefix"],
+        cc_cd=raw.get("cc_cd", "1300"),
         consul_dc_format=raw["consul_dc_format"],
         note_dc_format=raw["note_dc_format"],
         company_code=raw["company_code"],
