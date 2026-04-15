@@ -220,7 +220,8 @@
           "enabled": false,
           "manual_review_reason": "자동 생성 제외"
         }
-      ]
+      ],
+      "cc_cd": "1300"
     },
     "cheongnyangni_station": {
       "display_name": "청량리역",
@@ -301,7 +302,8 @@
           "partner_code": "168405",
           "partner_name": "마호가니 by 도레도레"
         }
-      ]
+      ],
+      "cc_cd": "3500"
     }
   },
   "settlement_order": {
