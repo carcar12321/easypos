@@ -2,7 +2,7 @@
   "businesses": {
     "seoul_station": {
       "display_name": "서울역",
-      "doc_prefix": "POS",
+      "doc_prefix": "SPOS",
       "consul_dc_format": "{date_short} {business} POS매장임대을매출",
       "note_dc_format": "{date_short} {business} 임대을 POS매출({store})",
       "company_code": "1000",
@@ -225,7 +225,7 @@
     },
     "cheongnyangni_station": {
       "display_name": "청량리역",
-      "doc_prefix": "POS",
+      "doc_prefix": "CPOS",
       "consul_dc_format": "{date_short} {business} POS매장임대을매출",
       "note_dc_format": "{date_short} {business} 임대을 POS매출({store})",
       "company_code": "1000",
