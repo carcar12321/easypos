@@ -205,8 +205,17 @@ def _payment_amounts_for_store(
     card_sales: ParsedCardSales,
     daily_sales: ParsedDailySales,
     payment_methods: tuple[PaymentMethodConfig, ...],
+    store_aliases: dict[str, tuple[str, ...]] | None = None,
 ) -> dict[str, float]:
-    return dict(card_sales.by_store.get(store.source_name, {}))
+    card_keys = list(card_sales.by_store.keys())
+    card_store_key = _match_name_from_keys(
+        keys=card_keys,
+        store=store,
+        store_aliases=store_aliases,
+    )
+    if card_store_key is None:
+        return {}
+    return dict(card_sales.by_store.get(card_store_key, {}))
 
 
 def _build_store_lines(
@@ -399,13 +408,18 @@ def _resolve_account_date(
     return parsed_card.account_date
 
 
-def _build_store_candidates(store: StoreMapping) -> list[str]:
+def _build_store_candidates(
+    store: StoreMapping,
+    store_aliases: tuple[str, ...] | None = None,
+) -> list[str]:
     candidates = [
         store.output_name,
         store.source_name,
         store.source_name.replace("서울역점", "").strip(),
         store.output_name.replace("서울역점", "").strip(),
     ]
+    if store_aliases:
+        candidates.extend(store_aliases)
     unique: list[str] = []
     for candidate in candidates:
         if candidate and candidate not in unique:
@@ -417,8 +431,10 @@ def _match_name_from_keys(
     *,
     keys: list[str],
     store: StoreMapping,
+    store_aliases: dict[str, tuple[str, ...]] | None = None,
 ) -> str | None:
-    candidates = _build_store_candidates(store)
+    aliases = store_aliases.get(store.source_name, ()) if store_aliases else ()
+    candidates = _build_store_candidates(store, aliases)
     for candidate in candidates:
         if candidate in keys:
             return candidate
@@ -621,17 +637,26 @@ def generate_voucher(
     lines: list[VoucherLine] = []
     next_seq = 1
     first_line = True
+    daily_keys = list(parsed_daily.by_store.keys())
+    matched_daily_store_keys: set[str] = set()
 
     for store in business.active_stores:
-        daily_row = parsed_daily.by_store.get(store.source_name)
-        if not daily_row:
+        daily_store_key = _match_name_from_keys(
+            keys=daily_keys,
+            store=store,
+            store_aliases=settlement_store_aliases,
+        )
+        if daily_store_key is None:
             continue
+        daily_row = parsed_daily.by_store[daily_store_key]
+        matched_daily_store_keys.add(daily_store_key)
 
         amounts = _payment_amounts_for_store(
             store=store,
             card_sales=parsed_card,
             daily_sales=parsed_daily,
             payment_methods=config.payment_methods_in_order,
+            store_aliases=settlement_store_aliases,
         )
         settlement_amount = parsed_settlement.by_store.get(store.source_name, 0.0) if parsed_settlement else 0.0
 
@@ -674,13 +699,18 @@ def generate_voucher(
         for name, row in parsed_daily.by_store.items()
         if row.gross_sales or row.discount_amount or row.cash_sales or row.electronic_money_sales
     }
-    active_source_names = business.source_store_names
-    intentionally_excluded_source_names = {
-        store.source_name
-        for store in business.stores
-        if not store.enabled
-    }
-    skipped = sorted(input_store_names - active_source_names - intentionally_excluded_source_names)
+    intentionally_excluded_daily_keys: set[str] = set()
+    for store in business.stores:
+        if store.enabled:
+            continue
+        excluded_key = _match_name_from_keys(
+            keys=daily_keys,
+            store=store,
+            store_aliases=settlement_store_aliases,
+        )
+        if excluded_key:
+            intentionally_excluded_daily_keys.add(excluded_key)
+    skipped = sorted(input_store_names - matched_daily_store_keys - intentionally_excluded_daily_keys)
     if skipped:
         notes.append("자동 생성 제외 매장(입력에는 존재): " + ", ".join(skipped))
 
@@ -770,14 +800,22 @@ def generate_sales_template_auto_input(
             missing_sheet_store_names.append(store.output_name)
             continue
 
-        daily_store_key = _match_name_from_keys(keys=daily_keys, store=store)
+        daily_store_key = _match_name_from_keys(
+            keys=daily_keys,
+            store=store,
+            store_aliases=settlement_store_aliases,
+        )
         if daily_store_key is None:
             skipped_store_names.append(store.output_name)
             missing_daily_store_names.append(store.output_name)
             continue
         daily_row = parsed_daily.by_store[daily_store_key]
 
-        card_store_key = _match_name_from_keys(keys=card_keys, store=store)
+        card_store_key = _match_name_from_keys(
+            keys=card_keys,
+            store=store,
+            store_aliases=settlement_store_aliases,
+        )
         payment_amounts = parsed_card.by_store.get(card_store_key, {}) if card_store_key else {}
         settlement_amount = parsed_settlement.by_store.get(store.source_name, 0.0) if parsed_settlement else 0.0
         cash_sales = float(daily_row.cash_sales or 0.0)
